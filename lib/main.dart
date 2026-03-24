@@ -8,6 +8,7 @@ import 'screens/add_product_screen.dart';
 import 'screens/categories_screen.dart';
 import 'screens/inventory_screens.dart';
 import 'screens/other_screens.dart';
+import 'screens/login_screen.dart';
 
 void main() => runApp(const StoreAdminApp());
 
@@ -22,6 +23,7 @@ class StoreAdminApp extends StatefulWidget {
 class _StoreAdminAppState extends State<StoreAdminApp>
     with WidgetsBindingObserver {
   final AppState _state = AppState();
+  bool _isLoggedIn = false;
   void _rebuild() => setState(() {});
 
   @override
@@ -78,7 +80,16 @@ class _StoreAdminAppState extends State<StoreAdminApp>
         drawerTheme:
             const DrawerThemeData(backgroundColor: Color(0xFF13162A)),
       ),
-      home: _AdminShell(appState: _state, onStateChanged: _rebuild),
+      home: _isLoggedIn
+          ? _AdminShell(
+              appState: _state,
+              onStateChanged: _rebuild,
+              onLogout: () => setState(() => _isLoggedIn = false),
+            )
+          : LoginScreen(
+              appState: _state,
+              onLoginSuccess: () => setState(() => _isLoggedIn = true),
+            ),
     );
   }
 }
@@ -88,7 +99,8 @@ class _StoreAdminAppState extends State<StoreAdminApp>
 class _AdminShell extends StatefulWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
-  const _AdminShell({required this.appState, required this.onStateChanged});
+  final VoidCallback onLogout;
+  const _AdminShell({required this.appState, required this.onStateChanged, required this.onLogout});
   @override
   State<_AdminShell> createState() => _AdminShellState();
 }
@@ -190,7 +202,8 @@ class _AdminShellState extends State<_AdminShell>
       case 'settings':
         return SettingsScreen(
             appState: widget.appState,
-            onStateChanged: widget.onStateChanged);
+            onStateChanged: widget.onStateChanged,
+            onLogout: widget.onLogout);
       default:
         return DashboardScreen(appState: widget.appState, onStateChanged: widget.onStateChanged);
     }
@@ -239,6 +252,7 @@ class _AdminShellState extends State<_AdminShell>
                         behavior: HitTestBehavior.opaque,
                         child: Sidebar(
                           appState: widget.appState,
+                          onLogout: widget.onLogout,
                           onStateChanged: () {
                             widget.onStateChanged();
                             _closeSidebar();
@@ -315,6 +329,7 @@ class _AdminShellState extends State<_AdminShell>
                       behavior: HitTestBehavior.opaque,
                       child: Sidebar(
                         appState: widget.appState,
+                        onLogout: widget.onLogout,
                         onStateChanged: () {
                           widget.onStateChanged();
                           _closeSidebar();

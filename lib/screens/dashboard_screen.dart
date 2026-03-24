@@ -2,21 +2,77 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../models/app_state.dart';
 import '../widgets/page_header.dart';
+import '../services/api_service.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
   const DashboardScreen({super.key, required this.appState, required this.onStateChanged});
 
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  bool _isLoading = true;
+  
+  // 🌟 NEW: Variables to hold your money and orders!
+  double _totalRevenue = 0.0;
+  List<dynamic> _recentOrders = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData();
+  }
+
+  Future<void> _fetchDashboardData() async {
+    try {
+      // Fetch Products and Orders in parallel for faster loading
+      final results = await Future.wait([
+        WebApiService.getProducts(),
+        WebApiService.getOrders(),
+      ]);
+
+      final liveProducts = results[0] as List<Product>;
+      final liveOrders = results[1] as List<dynamic>;
+
+      // 3. Calculate Total Revenue! 💸
+      double calculatedRevenue = 0.0;
+      for (var order in liveOrders) {
+        calculatedRevenue += double.tryParse(order['total_amount'].toString()) ?? 0.0;
+      }
+
+      if (mounted) {
+        setState(() {
+          widget.appState.products.clear();
+          widget.appState.products.addAll(liveProducts);
+          
+          _recentOrders = liveOrders; // Save the orders
+          _totalRevenue = calculatedRevenue; // Save the money
+          _isLoading = false;
+        });
+        widget.onStateChanged();
+      }
+    } catch (e) {
+      print("Dashboard Fetch Error: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   void _navigate(String route) {
-    appState.currentRoute = route;
-    onStateChanged();
+    widget.appState.currentRoute = route;
+    widget.onStateChanged();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final lowStock = appState.lowStockProducts;
+    final lowStock = widget.appState.lowStockProducts;
+
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF4B6BFB)));
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -37,28 +93,29 @@ class DashboardScreen extends StatelessWidget {
               children: [
                 _StatCard(
                   label: 'PRODUCTS',
-                  value: '${appState.products.length}',
+                  value: '${widget.appState.products.length}', 
                   color: const Color(0xFF3B6FF0),
                   icon: Icons.inventory_2_outlined,
                   onTap: () => _navigate('all_products'),
                 ),
                 _StatCard(
                   label: 'CATEGORIES',
-                  value: '${appState.categories.length}',
+                  value: '${widget.appState.categories.length}',
                   color: const Color(0xFFE8561A),
                   icon: Icons.category_outlined,
                   onTap: () => _navigate('all_categories'),
                 ),
                 _StatCard(
                   label: 'TOTAL REVENUE',
-                  value: '₱0.00',
+                  // 🌟 NEW: Displays your real total revenue!
+                  value: '₱${_totalRevenue.toStringAsFixed(2)}', 
                   color: const Color(0xFF22C88A),
                   icon: Icons.attach_money_outlined,
                   onTap: () => _navigate('sales_report'),
                 ),
                 _StatCard(
                   label: 'LOW STOCK',
-                  value: '${lowStock.length}',
+                  value: '${lowStock.length}', 
                   color: const Color(0xFFE53935),
                   icon: Icons.warning_amber_outlined,
                   onTap: () => _navigate('low_stock'),
@@ -69,38 +126,47 @@ class DashboardScreen extends StatelessWidget {
           const SizedBox(height: 20),
           LayoutBuilder(builder: (context, c) {
             final isNarrow = c.maxWidth < 600;
+            
+            // 🌟 NEW: Recent Orders Panel
             final ordersPanel = _PanelCard(
               title: 'Recent Orders',
               child: SizedBox(
-                height: 160,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.receipt_long_outlined,
-                        color: isDark ? Colors.white24 : Colors.black12,
-                        size: 44,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'No orders yet',
-                        style: TextStyle(
-                          color:
-                              isDark ? Colors.white38 : const Color(0xFF9CA3AF),
-                          fontSize: 15,
+                height: 260, // Made slightly taller to fit the list
+                child: _recentOrders.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.receipt_long_outlined, color: isDark ? Colors.white24 : Colors.black12, size: 44),
+                            const SizedBox(height: 10),
+                            Text('No orders yet', style: TextStyle(color: isDark ? Colors.white38 : const Color(0xFF9CA3AF), fontSize: 15)),
+                          ],
                         ),
+                      )
+                    : ListView.builder(
+                        itemCount: _recentOrders.length > 5 ? 5 : _recentOrders.length, // Show top 5
+                        itemBuilder: (context, index) {
+                          var order = _recentOrders[index];
+                          String id = order['id']?.toString() ?? '...';
+                          String amount = double.tryParse(order['total_amount']?.toString() ?? '0')?.toStringAsFixed(2) ?? '0.00';
+                          String status = order['status'] ?? 'Completed';
+                          
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: CircleAvatar(
+                              backgroundColor: const Color(0xFF4B6BFB).withOpacity(0.1),
+                              child: const Icon(Icons.receipt_long, color: Color(0xFF4B6BFB), size: 18),
+                            ),
+                            title: Text('Order #$id', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1A1D2E), fontWeight: FontWeight.w600)),
+                            subtitle: Text(status, style: TextStyle(color: isDark ? Colors.white54 : Colors.grey, fontSize: 12)),
+                            trailing: Text('₱$amount', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF22C88A), fontSize: 14)),
+                          );
+                        },
                       ),
-                    ],
-                  ),
-                ),
               ),
             );
 
-            // FIX 1: replaced undefined `bgCard` with a theme-aware color expression
-            final chartBgColor =
-                isDark ? const Color(0xFF1A1D2E) : const Color(0xFFFFFFFF);
-
+            final chartBgColor = isDark ? const Color(0xFF1A1D2E) : const Color(0xFFFFFFFF);
             final chartPanel = Container(
               height: 260,
               padding: const EdgeInsets.all(20),
@@ -112,13 +178,7 @@ class DashboardScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Revenue & Orders Trend',
-                    style: TextStyle(
-                        color: isDark ? Colors.white : const Color(0xFF1A1D2E),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600),
-                  ),
+                  Text('Revenue & Orders Trend', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1A1D2E), fontSize: 16, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   const Expanded(child: _RevenueChart()),
                 ],
@@ -131,15 +191,7 @@ class DashboardScreen extends StatelessWidget {
                   ? Padding(
                       padding: const EdgeInsets.symmetric(vertical: 24),
                       child: Center(
-                        child: Text(
-                          'All stock levels healthy ✅',
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.white54
-                                : const Color(0xFF6B7280),
-                            fontSize: 14,
-                          ),
-                        ),
+                        child: Text('All stock levels healthy ✅', style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF6B7280), fontSize: 14)),
                       ),
                     )
                   : Column(children: lowStock.map(_lowStockRow).toList()),
@@ -179,7 +231,7 @@ class DashboardScreen extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(7),
             child: Image.network(
-              p.imageUrl,
+              "${WebApiService.baseUrl}${p.imageUrl}",
               width: 40,
               height: 40,
               fit: BoxFit.cover,
@@ -187,39 +239,21 @@ class DashboardScreen extends StatelessWidget {
                   width: 40,
                   height: 40,
                   color: isDark ? Colors.white12 : const Color(0xFFF3F4F6),
-                  child: Icon(Icons.image,
-                      color: isDark ? Colors.white38 : Colors.black26,
-                      size: 18)),
+                  child: Icon(Icons.image, color: isDark ? Colors.white38 : Colors.black26, size: 18)),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(p.name,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: isDark ? Colors.white : const Color(0xFF1A1D2E),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14)),
-              Text(p.category,
-                  style: TextStyle(
-                      color: isDark ? Colors.white54 : const Color(0xFF6B7280),
-                      fontSize: 12)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(p.name, overflow: TextOverflow.ellipsis, style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1A1D2E), fontWeight: FontWeight.w500, fontSize: 14)),
+              Text(p.category, style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF6B7280), fontSize: 12)),
             ]),
           ),
           const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5C518),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text('${p.stock} left',
-                style: const TextStyle(
-                    color: Colors.black87,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600)),
+            decoration: BoxDecoration(color: const Color(0xFFF5C518), borderRadius: BorderRadius.circular(20)),
+            child: Text('${p.stock} left', style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.w600)),
           ),
         ]),
       );
@@ -233,12 +267,7 @@ class _StatCard extends StatefulWidget {
   final Color color;
   final IconData icon;
   final VoidCallback? onTap;
-  const _StatCard(
-      {required this.label,
-      required this.value,
-      required this.color,
-      required this.icon,
-      this.onTap});
+  const _StatCard({required this.label, required this.value, required this.color, required this.icon, this.onTap});
 
   @override
   State<_StatCard> createState() => _StatCardState();
@@ -250,14 +279,8 @@ class _StatCardState extends State<_StatCard> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark
-        ? widget.color
-        : widget.color.withOpacity(_hovered ? 0.22 : 0.13);
-    final textColor = isDark
-        ? Colors.white
-        : (widget.color == const Color(0xFFE53935)
-            ? Colors.redAccent
-            : Colors.black87);
+    final bgColor = isDark ? widget.color : widget.color.withOpacity(_hovered ? 0.22 : 0.13);
+    final textColor = isDark ? Colors.white : (widget.color == const Color(0xFFE53935) ? Colors.redAccent : Colors.black87);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -274,59 +297,20 @@ class _StatCardState extends State<_StatCard> {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(14),
-          border:
-              isDark ? null : Border.all(color: widget.color.withOpacity(0.2)),
+          border: isDark ? null : Border.all(color: widget.color.withOpacity(0.2)),
           boxShadow: _hovered
-              ? [
-                  BoxShadow(
-                    color: widget.color.withOpacity(isDark ? 0.35 : 0.2),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  )
-                ]
-              : isDark
-                  ? []
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      )
-                    ],
+              ? [BoxShadow(color: widget.color.withOpacity(isDark ? 0.35 : 0.2), blurRadius: 18, offset: const Offset(0, 6))]
+              : isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Flexible(
-                child: Text(
-                  widget.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: isDark ? Colors.white70 : Colors.black54,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color:
-                      isDark ? Colors.white24 : widget.color.withOpacity(0.25),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(widget.icon,
-                    color: isDark ? Colors.white : widget.color, size: 17),
-              ),
+              Flexible(child: Text(widget.label, overflow: TextOverflow.ellipsis, style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.4))),
+              Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: isDark ? Colors.white24 : widget.color.withOpacity(0.25), borderRadius: BorderRadius.circular(8)), child: Icon(widget.icon, color: isDark ? Colors.white : widget.color, size: 17)),
             ]),
-            Text(widget.value,
-                style: TextStyle(
-                    color: textColor,
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold)),
+            Text(widget.value, style: TextStyle(color: textColor, fontSize: 30, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -353,19 +337,10 @@ class _PanelCard extends StatelessWidget {
         color: bgColor,
         borderRadius: BorderRadius.circular(14),
         border: isDark ? null : Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: isDark
-            ? []
-            : [
-                BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2))
-              ],
+        boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title,
-            style: TextStyle(
-                color: textColor, fontSize: 16, fontWeight: FontWeight.w600)),
+        Text(title, style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w600)),
         const SizedBox(height: 14),
         child,
       ]),
@@ -382,9 +357,7 @@ class _RevenueChart extends StatelessWidget {
     final random = math.Random(42);
     final barData = List.generate(30, (i) => 200 + random.nextDouble() * 600);
     final lineData = List.generate(30, (i) => 10 + random.nextDouble() * 50);
-    return CustomPaint(
-        painter: _ChartPainter(barData: barData, lineData: lineData),
-        child: Container());
+    return CustomPaint(painter: _ChartPainter(barData: barData, lineData: lineData), child: Container());
   }
 }
 
@@ -398,16 +371,9 @@ class _ChartPainter extends CustomPainter {
     final maxBar = barData.reduce(math.max);
     final maxLine = lineData.reduce(math.max);
     final barPaint = Paint()..color = const Color(0xFF22C88A);
-    final linePaint = Paint()
-      ..color = const Color(0xFF4B6BFB)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-    final fillPaint = Paint()
-      ..color = const Color(0xFF4B6BFB).withOpacity(0.15)
-      ..style = PaintingStyle.fill;
-    final gridPaint = Paint()
-      ..color = Colors.white12
-      ..strokeWidth = 0.5;
+    final linePaint = Paint()..color = const Color(0xFF4B6BFB)..strokeWidth = 2..style = PaintingStyle.stroke;
+    final fillPaint = Paint()..color = const Color(0xFF4B6BFB).withOpacity(0.15)..style = PaintingStyle.fill;
+    final gridPaint = Paint()..color = Colors.white12..strokeWidth = 0.5;
 
     for (int i = 0; i <= 4; i++) {
       final y = size.height * i / 4;
@@ -419,11 +385,7 @@ class _ChartPainter extends CustomPainter {
     for (int i = 0; i < barData.length; i++) {
       final x = i * barSpacing + barSpacing * 0.2;
       final barH = (barData[i] / maxBar) * size.height * 0.85;
-      canvas.drawRRect(
-          RRect.fromRectAndRadius(
-              Rect.fromLTWH(x, size.height - barH, barWidth, barH),
-              const Radius.circular(3)),
-          barPaint);
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, size.height - barH, barWidth, barH), const Radius.circular(3)), barPaint);
     }
 
     final linePath = Path();

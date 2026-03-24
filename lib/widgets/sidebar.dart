@@ -5,12 +5,14 @@ import '../models/settings_scroll_target.dart';
 class Sidebar extends StatefulWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
+  final VoidCallback? onLogout;
   final bool inDrawer;
 
   const Sidebar({
     super.key,
     required this.appState,
     required this.onStateChanged,
+    this.onLogout,
     this.inDrawer = false,
   });
 
@@ -92,26 +94,70 @@ class _SidebarState extends State<Sidebar> {
 
   void _showLogoutDialog() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1D2E);
+    final textMuted   = isDark ? Colors.white54 : const Color(0xFF6B7280);
+    final bgDialog    = isDark ? const Color(0xFF1A1D2E) : Colors.white;
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1A1D2E) : Colors.white,
-        title: Text('Log Out',
-            style: TextStyle(
-                color: Theme.of(context).textTheme.titleLarge?.color)),
-        content: Text('Are you sure you want to log out?',
-            style: TextStyle(
-                color: Theme.of(context).textTheme.bodyMedium?.color)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Log Out'),
+      barrierColor: Colors.black45,
+      builder: (_) => Dialog(
+        backgroundColor: bgDialog,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 8,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Title
+              Text('Log Out',
+                  style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 10),
+              // Body
+              Text('Are you sure you want to log out?',
+                  style: TextStyle(color: textMuted, fontSize: 14, height: 1.4)),
+              const SizedBox(height: 24),
+              // Buttons row
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF4B6BFB),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                  child: const Text('Cancel',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    widget.onLogout?.call();
+                  },
+                  child: const Text('Log Out',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                ),
+              ]),
+            ],
           ),
-        ],
+        ),
+        ),
       ),
     );
   }
@@ -320,7 +366,9 @@ class _SidebarState extends State<Sidebar> {
                               _subItem('Account', 'settings_account', isDark, textMuted,
                                   icon: Icons.manage_accounts_outlined),
                               _subItem('Log Out', 'logout', isDark, textMuted,
-                                  icon: Icons.logout, color: Colors.redAccent),
+                                  icon: Icons.logout,
+                                  color: Colors.redAccent,
+                                  iconColor: Colors.redAccent),
                             ])
                           : const SizedBox.shrink(),
                     ),
@@ -480,7 +528,7 @@ class _SidebarState extends State<Sidebar> {
 
   // ── Sub-item ─────────────────────────────────────────────────────────────────
   Widget _subItem(String label, String route, bool isDark, Color textMuted,
-      {IconData? icon, Color? color}) {
+      {IconData? icon, Color? color, Color? iconColor}) {
     final active = widget.appState.currentRoute == route;
     final hovered = _hoveredRoute == route;
 
@@ -507,7 +555,7 @@ class _SidebarState extends State<Sidebar> {
           ),
           child: Row(children: [
             if (icon != null) ...[
-              Icon(icon, size: 15, color: color ?? textMuted),
+              Icon(icon, size: 15, color: iconColor ?? color ?? textMuted),
               const SizedBox(width: 7),
             ],
             Expanded(

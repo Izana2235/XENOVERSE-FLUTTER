@@ -1435,12 +1435,14 @@ class FinancialReportScreen extends StatelessWidget {
 class SettingsScreen extends StatefulWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
+  final VoidCallback? onLogout;
   /// Optional section to scroll to on load: 'appearance' | 'store' | 'account'
   final String? scrollTo;
   const SettingsScreen(
       {super.key,
       required this.appState,
       required this.onStateChanged,
+      this.onLogout,
       this.scrollTo});
 
   @override
@@ -1819,7 +1821,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     TextButton(onPressed: () => Navigator.pop(context), child: Text(l.tr('Cancel'))),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () {
+                        Navigator.pop(context);       // close dialog
+                        widget.onLogout?.call();      // go back to login
+                      },
                       child: Text(l.tr('Log Out')),
                     ),
                   ],

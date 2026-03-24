@@ -2,14 +2,15 @@
 enum ThemePreference { light, dark, system }
 
 // ─── Product Model ─────────────────────────────────────────────────────────────
+// ─── Product Model (Fixed for UI) ──────────────────────────────────────────
 class Product {
   final String id;
   String name;
   String category;
   double price;
   int stock;
-  String imageUrl;
-  String description;
+  String imageUrl;    // 🌟 Removed the '?'
+  String description; // 🌟 Removed the '?'
   static const int lowStockThreshold = 20;
 
   Product({
@@ -18,8 +19,8 @@ class Product {
     required this.category,
     required this.price,
     required this.stock,
-    this.imageUrl = '',
-    this.description = '',
+    this.imageUrl = '',    // 🌟 Put default back
+    this.description = '', // 🌟 Put default back
   });
 
   bool get isLowStock => stock <= lowStockThreshold;
@@ -36,7 +37,7 @@ class Category {
     required this.id,
     required this.name,
     this.description = '',
-    this.icon = '📦',
+    this.icon = '',
   });
 }
 
@@ -69,83 +70,133 @@ class AppState {
   List<Product> products = [
     Product(
       id: 'P001',
-      name: 'Wireless Headphones',
-      category: 'Electronics',
-      price: 2999.00,
-      stock: 15,
+      name: 'Coffee',
+      category: 'Beverages',
+      price: 50.00,
+      stock: 100,
       imageUrl: 'https://via.placeholder.com/40',
     ),
     Product(
       id: 'P002',
-      name: 'Mechanical Keyboard',
-      category: 'Electronics',
-      price: 4500.00,
-      stock: 8,
+      name: 'Tea',
+      category: 'Beverages',
+      price: 40.00,
+      stock: 80,
       imageUrl: 'https://via.placeholder.com/40',
     ),
     Product(
       id: 'P003',
-      name: 'USB-C Hub',
-      category: 'Electronics',
-      price: 1200.00,
-      stock: 42,
+      name: 'Orange Juice',
+      category: 'Beverages',
+      price: 60.00,
+      stock: 50,
       imageUrl: 'https://via.placeholder.com/40',
     ),
     Product(
       id: 'P004',
-      name: 'Office Chair',
-      category: 'Furniture',
-      price: 8500.00,
-      stock: 5,
+      name: 'Burger',
+      category: 'Main Dish',
+      price: 150.00,
+      stock: 20,
       imageUrl: 'https://via.placeholder.com/40',
     ),
     Product(
       id: 'P005',
-      name: 'Standing Desk',
-      category: 'Furniture',
-      price: 12000.00,
-      stock: 3,
+      name: 'Pizza',
+      category: 'Main Dish',
+      price: 200.00,
+      stock: 15,
       imageUrl: 'https://via.placeholder.com/40',
     ),
     Product(
       id: 'P006',
-      name: 'Webcam HD',
-      category: 'Electronics',
-      price: 1800.00,
-      stock: 22,
+      name: 'Pasta',
+      category: 'Main Dish',
+      price: 120.00,
+      stock: 25,
       imageUrl: 'https://via.placeholder.com/40',
     ),
     Product(
       id: 'P007',
-      name: 'Laptop Stand',
-      category: 'Accessories',
-      price: 950.00,
-      stock: 18,
+      name: 'Soda',
+      category: 'Drinks',
+      price: 30.00,
+      stock: 200,
       imageUrl: 'https://via.placeholder.com/40',
     ),
     Product(
       id: 'P008',
-      name: 'Mouse Pad XL',
-      category: 'Accessories',
-      price: 450.00,
-      stock: 60,
+      name: 'Mineral Water',
+      category: 'Drinks',
+      price: 20.00,
+      stock: 150,
       imageUrl: 'https://via.placeholder.com/40',
     ),
     Product(
       id: 'P009',
-      name: 'Cable Organizer',
-      category: 'Accessories',
-      price: 250.00,
+      name: 'Milk',
+      category: 'Drinks',
+      price: 45.00,
+      stock: 30,
+      imageUrl: 'https://via.placeholder.com/40',
+    ),
+    Product(
+      id: 'P010',
+      name: 'French Fries',
+      category: 'Appetizer',
+      price: 80.00,
+      stock: 40,
+      imageUrl: 'https://via.placeholder.com/40',
+    ),
+    Product(
+      id: 'P011',
+      name: 'Caesar Salad',
+      category: 'Appetizer',
+      price: 90.00,
+      stock: 35,
+      imageUrl: 'https://via.placeholder.com/40',
+    ),
+    Product(
+      id: 'P012',
+      name: 'Chicken Wings',
+      category: 'Appetizer',
+      price: 100.00,
+      stock: 30,
+      imageUrl: 'https://via.placeholder.com/40',
+    ),
+    Product(
+      id: 'P013',
+      name: 'Chocolate Cake',
+      category: 'Dessert',
+      price: 70.00,
       stock: 10,
+      imageUrl: 'https://via.placeholder.com/40',
+    ),
+    Product(
+      id: 'P014',
+      name: 'Ice Cream',
+      category: 'Dessert',
+      price: 50.00,
+      stock: 60,
+      imageUrl: 'https://via.placeholder.com/40',
+    ),
+    Product(
+      id: 'P015',
+      name: 'Apple Pie',
+      category: 'Dessert',
+      price: 65.00,
+      stock: 15,
       imageUrl: 'https://via.placeholder.com/40',
     ),
   ];
 
   // ── Sample categories ─────────────────────────────────────────────────────
   List<Category> categories = [
-    Category(id: 'C001', name: 'Electronics', description: 'Gadgets and devices'),
-    Category(id: 'C002', name: 'Furniture', description: 'Office and home furniture'),
-    Category(id: 'C003', name: 'Accessories', description: 'Desk and peripheral accessories'),
+    Category(id: 'C001', name: 'Beverages', description: 'Drinks and beverages', icon: '☕'),
+    Category(id: 'C002', name: 'Main Dish', description: 'Main course meals', icon: '🍽️'),
+    Category(id: 'C003', name: 'Drinks', description: 'Beverages and drinks', icon: '🥤'),
+    Category(id: 'C004', name: 'Appetizer', description: 'Starters and appetizers', icon: '🥗'),
+    Category(id: 'C005', name: 'Dessert', description: 'Sweet dishes and desserts', icon: '🍰'),
   ];
 
   // ── Derived getters ───────────────────────────────────────────────────────

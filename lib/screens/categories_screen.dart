@@ -273,9 +273,8 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  String _icon = '📦';
-  final _icons = ['📦', '☕', '🥐', '🥗', '🍕', '🍔', '🥤', '🍰', '🍜', '🧁', '🥩', '🍱',
-                  '👗', '👟', '💄', '🏠', '🔧', '📱', '💻', '🎮', '📚', '🌿'];
+  String _icon = '';
+  final _icons = ['📦', '☕', '🥐', '🥗', '🍕', '🍔', '🥤', '🍰', '🍜', '🧁', '🥩', '🍱', '🌿'];
 
   @override
   void dispose() {
@@ -295,7 +294,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
     widget.onStateChanged();
     _nameCtrl.clear();
     _descCtrl.clear();
-    setState(() => _icon = '📦');
+    setState(() => _icon = '');
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: const Text('Category added! ✅'),
       backgroundColor: const Color(0xFF22C88A),
@@ -786,7 +785,7 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                 size: 18,
                 color: const Color(0xFF4B6BFB),
               ),
-              label: Text('Select All', style: TextStyle(color: const Color(0xFF4B6BFB), fontSize: 12)),
+              label: const Text('Select All', style: TextStyle(color: Color(0xFF4B6BFB), fontSize: 12)),
             ),
           ]),
         ),

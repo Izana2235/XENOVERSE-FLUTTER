@@ -26,7 +26,7 @@ class Category {
   String description;
   String icon;
 
-  Category({required this.id, required this.name, this.description = '', this.icon = '📦'});
+  Category({required this.id, required this.name, this.description = '', this.icon = ''});
 }
 
 class StockRecord {
