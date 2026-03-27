@@ -9,6 +9,7 @@ import 'screens/categories_screen.dart';
 import 'screens/inventory_screens.dart';
 import 'screens/other_screens.dart';
 import 'screens/login_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() => runApp(const StoreAdminApp());
 
@@ -24,6 +25,7 @@ class _StoreAdminAppState extends State<StoreAdminApp>
     with WidgetsBindingObserver {
   final AppState _state = AppState();
   bool _isLoggedIn = false;
+  bool _showHome = true;
   void _rebuild() => setState(() {});
 
   @override
@@ -84,12 +86,20 @@ class _StoreAdminAppState extends State<StoreAdminApp>
           ? _AdminShell(
               appState: _state,
               onStateChanged: _rebuild,
-              onLogout: () => setState(() => _isLoggedIn = false),
+              onLogout: () => setState(() {
+                _isLoggedIn = false;
+                _showHome = true;
+              }),
             )
-          : LoginScreen(
-              appState: _state,
-              onLoginSuccess: () => setState(() => _isLoggedIn = true),
-            ),
+          : _showHome
+              ? HomeScreen(
+                  onLogin: () => setState(() => _showHome = false),
+                  onCreateAccount: () => setState(() => _showHome = false),
+                )
+              : LoginScreen(
+                  appState: _state,
+                  onLoginSuccess: () => setState(() => _isLoggedIn = true),
+                ),
     );
   }
 }
