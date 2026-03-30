@@ -26,6 +26,7 @@ class _StoreAdminAppState extends State<StoreAdminApp>
   final AppState _state = AppState();
   bool _isLoggedIn = false;
   bool _showHome = true;
+  bool _showRegister = false;
   void _rebuild() => setState(() {});
 
   @override
@@ -89,17 +90,34 @@ class _StoreAdminAppState extends State<StoreAdminApp>
               onLogout: () => setState(() {
                 _isLoggedIn = false;
                 _showHome = true;
+                _showRegister = false;
               }),
             )
           : _showHome
               ? HomeScreen(
-                  onLogin: () => setState(() => _showHome = false),
-                  onCreateAccount: () => setState(() => _showHome = false),
+                  onLogin: () => setState(() {
+                    _showHome = false;
+                    _showRegister = false;
+                  }),
+                  onCreateAccount: () => setState(() {
+                    _showHome = false;
+                    _showRegister = true;
+                  }),
                 )
-              : LoginScreen(
-                  appState: _state,
-                  onLoginSuccess: () => setState(() => _isLoggedIn = true),
-                ),
+              : _showRegister
+                  ? RegisterWizard(
+                      appState: _state,
+                      onFinished: () => setState(() => _isLoggedIn = true),
+                      onBack: () => setState(() {
+                        _showHome = true;
+                        _showRegister = false;
+                      }),
+                    )
+                  : LoginScreen(
+                      appState: _state,
+                      onLoginSuccess: () => setState(() => _isLoggedIn = true),
+                      onBack: () => setState(() => _showHome = true),
+                    ),
     );
   }
 }

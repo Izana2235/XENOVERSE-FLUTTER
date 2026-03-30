@@ -8,8 +8,9 @@ import 'dart:math' as math;
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onLogin;
   final VoidCallback? onCreateAccount;
+  final VoidCallback? onBackToLanding;
 
-  const HomeScreen({super.key, this.onLogin, this.onCreateAccount});
+  const HomeScreen({super.key, this.onLogin, this.onCreateAccount, this.onBackToLanding});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -32,6 +33,20 @@ class _HomeScreenState extends State<HomeScreen>
   // Navbar scroll tint
   final ScrollController _scroll = ScrollController();
   double _scrollY = 0;
+
+  // Section keys for smooth scroll
+  final GlobalKey _featuresKey   = GlobalKey();
+  final GlobalKey _howItWorksKey = GlobalKey();
+  final GlobalKey _pricingKey    = GlobalKey();
+
+  void _scrollTo(GlobalKey key) {
+    final ctx = key.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(ctx,
+          duration: const Duration(milliseconds: 650),
+          curve: Curves.easeInOut);
+    }
+  }
 
   @override
   void initState() {
@@ -87,6 +102,34 @@ class _HomeScreenState extends State<HomeScreen>
     final size = MediaQuery.of(context).size;
     final isMobile = size.width < 750;
 
+    void goLogin() {
+      if (widget.onLogin != null) {
+        widget.onLogin!();
+      } else {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const XenoverseLoginPage()),
+        );
+      }
+    }
+
+    void goRegister() {
+      if (widget.onCreateAccount != null) {
+        widget.onCreateAccount!();
+      } else {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const XenoverseRegisterPage()),
+        );
+      }
+    }
+
+    void goBackToLanding() {
+      if (widget.onBackToLanding != null) {
+        widget.onBackToLanding!();
+      } else if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(children: [
@@ -104,27 +147,27 @@ class _HomeScreenState extends State<HomeScreen>
               subFade: _subFade,
               subSlide: _subSlide,
               btnFade: _btnFade,
-              onCreateAccount: widget.onCreateAccount,
-              onLogin: widget.onLogin,
+              onCreateAccount: goRegister,
+              onLogin: goLogin,
             ),
 
             // ── TRUSTED BY ───────────────────────────────────────
             _TrustedSection(isMobile: isMobile),
 
             // ── FEATURES ─────────────────────────────────────────
-            _FeaturesSection(isMobile: isMobile),
+            _FeaturesSection(key: _featuresKey, isMobile: isMobile),
 
-            // ── DASHBOARD PREVIEW ────────────────────────────────
-            _DashboardPreview(isMobile: isMobile),
+            // ── DASHBOARD PREVIEW (Pricing anchor) ───────────────
+            _DashboardPreview(key: _pricingKey, isMobile: isMobile),
 
             // ── HOW IT WORKS ─────────────────────────────────────
-            _HowItWorksSection(isMobile: isMobile),
+            _HowItWorksSection(key: _howItWorksKey, isMobile: isMobile),
 
             // ── CTA BOTTOM ───────────────────────────────────────
             _BottomCTA(
               isMobile: isMobile,
-              onCreateAccount: widget.onCreateAccount,
-              onLogin: widget.onLogin,
+              onCreateAccount: goRegister,
+              onLogin: goLogin,
             ),
 
             // ── FOOTER ───────────────────────────────────────────
@@ -136,8 +179,12 @@ class _HomeScreenState extends State<HomeScreen>
         _NavBar(
           scrollY: _scrollY,
           isMobile: isMobile,
-          onLogin: widget.onLogin,
-          onCreateAccount: widget.onCreateAccount,
+          onLogin: goLogin,
+          onCreateAccount: goRegister,
+          onBackToLanding: goBackToLanding,
+          onFeaturesTap: () => _scrollTo(_featuresKey),
+          onHowItWorksTap: () => _scrollTo(_howItWorksKey),
+          onPricingTap: () => _scrollTo(_pricingKey),
         ),
       ]),
     );
@@ -150,12 +197,20 @@ class _NavBar extends StatelessWidget {
   final bool isMobile;
   final VoidCallback? onLogin;
   final VoidCallback? onCreateAccount;
+  final VoidCallback? onBackToLanding;
+  final VoidCallback? onFeaturesTap;
+  final VoidCallback? onHowItWorksTap;
+  final VoidCallback? onPricingTap;
 
   const _NavBar(
       {required this.scrollY,
       required this.isMobile,
       this.onLogin,
-      this.onCreateAccount});
+      this.onCreateAccount,
+      this.onBackToLanding,
+      this.onFeaturesTap,
+      this.onHowItWorksTap,
+      this.onPricingTap});
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +255,7 @@ class _NavBar extends StatelessWidget {
                 TextSpan(
                     text: 'verse',
                     style: TextStyle(
-                        color: Color(0xFF4B6BFB),
+                        color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.3)),
@@ -212,35 +267,22 @@ class _NavBar extends StatelessWidget {
         const Spacer(),
 
         if (!isMobile) ...[
-          _NavItem('Features'),
-          _NavItem('How It Works'),
-          _NavItem('Pricing'),
-          const SizedBox(width: 24),
+          _NavItem('Features', onTap: onFeaturesTap),
+          _NavItem('How It Works', onTap: onHowItWorksTap),
+          _NavItem('Pricing', onTap: onPricingTap),
+          const SizedBox(width: 16),
         ],
 
-        // Log in
+        // Log in button (styled as pill to balance navbar)
         GestureDetector(
           onTap: onLogin,
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text('Log in',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500)),
-          ),
-        ),
-
-        // Start for free
-        GestureDetector(
-          onTap: onCreateAccount,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(30),
             ),
-            child: const Text('Start for free',
+            child: const Text('Log in',
                 style: TextStyle(
                     color: Colors.black,
                     fontSize: 14,
@@ -254,15 +296,19 @@ class _NavBar extends StatelessWidget {
 
 class _NavItem extends StatelessWidget {
   final String label;
-  const _NavItem(this.label);
+  final VoidCallback? onTap;
+  const _NavItem(this.label, {this.onTap});
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Text(label,
-            style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-                fontWeight: FontWeight.w500)),
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(label,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500)),
+        ),
       );
 }
 
@@ -401,40 +447,11 @@ class _HeroSection extends StatelessWidget {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(50),
                         ),
-                        child: const Text('Start for free',
+                        child: const Text('Create account',
                             style: TextStyle(
                                 color: Colors.black,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w800)),
-                      ),
-                    ),
-
-                    // Secondary — outlined pill
-                    GestureDetector(
-                      onTap: onLogin,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 28, vertical: 16),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(50),
-                          border: Border.all(
-                              color: Colors.white.withOpacity(0.5),
-                              width: 1.5),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.play_circle_outline_rounded,
-                                color: Colors.white.withOpacity(0.85),
-                                size: 18),
-                            const SizedBox(width: 8),
-                            Text('Sign in',
-                                style: TextStyle(
-                                    color: Colors.white.withOpacity(0.85),
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600)),
-                          ],
-                        ),
                       ),
                     ),
                   ],
@@ -582,7 +599,7 @@ class _TrustBadge extends StatelessWidget {
 // ─── FEATURES ─────────────────────────────────────────────────────────────────
 class _FeaturesSection extends StatelessWidget {
   final bool isMobile;
-  const _FeaturesSection({required this.isMobile});
+  const _FeaturesSection({super.key, required this.isMobile});
 
   @override
   Widget build(BuildContext context) {
@@ -733,7 +750,7 @@ class _FeatureCardState extends State<_FeatureCard> {
 // ─── DASHBOARD PREVIEW ────────────────────────────────────────────────────────
 class _DashboardPreview extends StatelessWidget {
   final bool isMobile;
-  const _DashboardPreview({required this.isMobile});
+  const _DashboardPreview({super.key, required this.isMobile});
 
   @override
   Widget build(BuildContext context) {
@@ -1023,7 +1040,7 @@ class _ChartPainter extends CustomPainter {
 // ─── HOW IT WORKS ─────────────────────────────────────────────────────────────
 class _HowItWorksSection extends StatelessWidget {
   final bool isMobile;
-  const _HowItWorksSection({required this.isMobile});
+  const _HowItWorksSection({super.key, required this.isMobile});
 
   @override
   Widget build(BuildContext context) {
@@ -1268,7 +1285,7 @@ class _FooterSection extends StatelessWidget {
               TextSpan(
                   text: 'verse POS',
                   style: TextStyle(
-                      color: Color(0xFF4B6BFB),
+                      color: Colors.white,
                       fontWeight: FontWeight.w800,
                       fontSize: 13)),
             ]),
@@ -1280,5 +1297,335 @@ class _FooterSection extends StatelessWidget {
                 color: Colors.white.withOpacity(0.2), fontSize: 12)),
       ]),
     );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// LOGIN PAGE — "Log in" in navbar pushes this. Back → landing page.
+// ═════════════════════════════════════════════════════════════════════════════
+class XenoverseLoginPage extends StatefulWidget {
+  const XenoverseLoginPage({super.key});
+  @override
+  State<XenoverseLoginPage> createState() => _XenoverseLoginPageState();
+}
+
+class _XenoverseLoginPageState extends State<XenoverseLoginPage>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _bgCtrl;
+  late Animation<double> _bgAnim;
+  final _emailCtrl = TextEditingController();
+  final _passCtrl  = TextEditingController();
+  bool _obscure = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _bgCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 12))..repeat();
+    _bgAnim = Tween<double>(begin: 0, end: 1).animate(_bgCtrl);
+  }
+
+  @override
+  void dispose() { _bgCtrl.dispose(); _emailCtrl.dispose(); _passCtrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A0A0F),
+        body: Stack(children: [
+          AnimatedBuilder(
+            animation: _bgAnim,
+            builder: (_, __) => CustomPaint(
+              painter: _CinematicBgPainter(_bgAnim.value),
+              size: MediaQuery.of(context).size,
+            ),
+          ),
+          SafeArea(
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white.withOpacity(0.15)),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white.withOpacity(0.85), size: 14),
+                        const SizedBox(width: 6),
+                        Text('Back', style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ),
+                ]),
+              ),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Column(children: [
+                        Container(
+                          width: 56, height: 56,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(colors: [Color(0xFF4B6BFB), Color(0xFF7C3AED)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(Icons.shopping_cart_outlined, color: Colors.white, size: 28),
+                        ),
+                        const SizedBox(height: 16),
+                        RichText(text: const TextSpan(children: [
+                          TextSpan(text: 'Xeno', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                          TextSpan(text: 'verse', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                        ])),
+                        const SizedBox(height: 6),
+                        Text('Welcome back', style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 14)),
+                        const SizedBox(height: 36),
+                        Container(
+                          padding: const EdgeInsets.all(28),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const Text('Log in to your account', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 28),
+                            _AuthField(label: 'Email', hint: 'you@example.com', controller: _emailCtrl, keyboardType: TextInputType.emailAddress),
+                            const SizedBox(height: 16),
+                            _AuthField(label: 'Password', hint: '••••••••', controller: _passCtrl, obscureText: _obscure,
+                              suffix: GestureDetector(
+                                onTap: () => setState(() => _obscure = !_obscure),
+                                child: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.white38, size: 20),
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                            SizedBox(
+                              width: double.infinity,
+                              child: GestureDetector(
+                                onTap: () { /* TODO: auth */ },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(colors: [Color(0xFF4B6BFB), Color(0xFF7C3AED)]),
+                                    borderRadius: BorderRadius.circular(50),
+                                    boxShadow: [BoxShadow(color: const Color(0xFF4B6BFB).withOpacity(0.35), blurRadius: 24, offset: const Offset(0, 8))],
+                                  ),
+                                  child: const Center(child: Text('Log In', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700))),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Center(
+                              child: GestureDetector(
+                                onTap: () => Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const XenoverseRegisterPage())),
+                                child: RichText(text: TextSpan(children: [
+                                  TextSpan(text: "Don't have an account? ", style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 13)),
+                                  const TextSpan(text: 'Sign up', style: TextStyle(color: Color(0xFF4B6BFB), fontSize: 13, fontWeight: FontWeight.w700)),
+                                ])),
+                              ),
+                            ),
+                          ]),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REGISTER PAGE — "Start for free" pushes this. Back → landing page.
+// ═════════════════════════════════════════════════════════════════════════════
+class XenoverseRegisterPage extends StatefulWidget {
+  const XenoverseRegisterPage({super.key});
+  @override
+  State<XenoverseRegisterPage> createState() => _XenoverseRegisterPageState();
+}
+
+class _XenoverseRegisterPageState extends State<XenoverseRegisterPage>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _bgCtrl;
+  late Animation<double> _bgAnim;
+  final _nameCtrl  = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passCtrl  = TextEditingController();
+  bool _obscure = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _bgCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 12))..repeat();
+    _bgAnim = Tween<double>(begin: 0, end: 1).animate(_bgCtrl);
+  }
+
+  @override
+  void dispose() { _bgCtrl.dispose(); _nameCtrl.dispose(); _emailCtrl.dispose(); _passCtrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A0A0F),
+        body: Stack(children: [
+          AnimatedBuilder(
+            animation: _bgAnim,
+            builder: (_, __) => CustomPaint(
+              painter: _CinematicBgPainter(_bgAnim.value),
+              size: MediaQuery.of(context).size,
+            ),
+          ),
+          SafeArea(
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white.withOpacity(0.15)),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white.withOpacity(0.85), size: 14),
+                        const SizedBox(width: 6),
+                        Text('Back', style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ),
+                ]),
+              ),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Column(children: [
+                        Container(
+                          width: 56, height: 56,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(colors: [Color(0xFF4B6BFB), Color(0xFF7C3AED)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(Icons.shopping_cart_outlined, color: Colors.white, size: 28),
+                        ),
+                        const SizedBox(height: 16),
+                        RichText(text: const TextSpan(children: [
+                          TextSpan(text: 'Xeno', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                          TextSpan(text: 'verse', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                        ])),
+                        const SizedBox(height: 6),
+                        Text('Create your free account', style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 14)),
+                        const SizedBox(height: 36),
+                        Container(
+                          padding: const EdgeInsets.all(28),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const Text('Start for free', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 28),
+                            _AuthField(label: 'Full Name', hint: 'Juan dela Cruz', controller: _nameCtrl),
+                            const SizedBox(height: 16),
+                            _AuthField(label: 'Email', hint: 'you@example.com', controller: _emailCtrl, keyboardType: TextInputType.emailAddress),
+                            const SizedBox(height: 16),
+                            _AuthField(label: 'Password', hint: '••••••••', controller: _passCtrl, obscureText: _obscure,
+                              suffix: GestureDetector(
+                                onTap: () => setState(() => _obscure = !_obscure),
+                                child: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.white38, size: 20),
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                            SizedBox(
+                              width: double.infinity,
+                              child: GestureDetector(
+                                onTap: () { /* TODO: register */ },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(50),
+                                    boxShadow: [BoxShadow(color: Colors.white.withOpacity(0.2), blurRadius: 24, offset: const Offset(0, 8))],
+                                  ),
+                                  child: const Center(child: Text('Create Account', style: TextStyle(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w800))),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Center(
+                              child: GestureDetector(
+                                onTap: () => Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const XenoverseLoginPage())),
+                                child: RichText(text: TextSpan(children: [
+                                  TextSpan(text: 'Already have an account? ', style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 13)),
+                                  const TextSpan(text: 'Log in', style: TextStyle(color: Color(0xFF4B6BFB), fontSize: 13, fontWeight: FontWeight.w700)),
+                                ])),
+                              ),
+                            ),
+                          ]),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─── Shared auth text field ────────────────────────────────────────────────────
+class _AuthField extends StatelessWidget {
+  final String label, hint;
+  final TextEditingController controller;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final Widget? suffix;
+
+  const _AuthField({required this.label, required this.hint, required this.controller,
+      this.obscureText = false, this.keyboardType, this.suffix});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 8),
+      TextField(
+        controller: controller, obscureText: obscureText, keyboardType: keyboardType,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 14),
+          suffixIcon: suffix != null ? Padding(padding: const EdgeInsets.only(right: 12), child: suffix) : null,
+          suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+          filled: true, fillColor: Colors.white.withOpacity(0.06),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF4B6BFB), width: 1.5)),
+        ),
+      ),
+    ]);
   }
 }
