@@ -53,12 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _goToRegister() {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => RegisterWizard(
-        appState: widget.appState,
-        onFinished: widget.onLoginSuccess,
-      ),
-    ));
+    widget.onLoginSuccess?.call();
   }
 
   @override
@@ -304,6 +299,7 @@ class _RegisterWizardState extends State<RegisterWizard> {
   bool _obscurePass = true;
   bool _obscureConfirm = true;
   bool _agreedToTerms = false;
+  bool _termsError = false;
 
   final _step1Key = GlobalKey<FormState>();
   final _step2Key = GlobalKey<FormState>();
@@ -368,17 +364,7 @@ class _RegisterWizardState extends State<RegisterWizard> {
     if (_step == 2) {
       if (!(_step3Key.currentState?.validate() ?? false)) return;
       if (!_agreedToTerms) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Please read and agree to the Terms & Conditions to continue.',
-            ),
-            backgroundColor: _errorClr,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
+        setState(() => _termsError = true);
         return;
       }
       // ── Sync into AppState ──────────────────────────────────────────
@@ -387,7 +373,6 @@ class _RegisterWizardState extends State<RegisterWizard> {
       widget.appState.country = _selectedCountry ?? widget.appState.country;
       widget.appState.currency = _selectedCurrency;
       // ───────────────────────────────────────────────────────────────
-      Navigator.of(context).pop();
       widget.onFinished?.call();
       return;
     }
@@ -413,13 +398,14 @@ class _RegisterWizardState extends State<RegisterWizard> {
       body: SafeArea(
         child: Stack(
           children: [
-            // ── Scrollable content ──────────────────────────────────
-            SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 72, 24, 32),
+            // ── Fixed (non-scrollable) content ──────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 56, 24, 16),
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 520),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                     // ── Gradient header ──────────────────────────────────
                 Container(
@@ -433,7 +419,7 @@ class _RegisterWizardState extends State<RegisterWizard> {
                     borderRadius:
                         BorderRadius.vertical(top: Radius.circular(20)),
                   ),
-                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 18),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -484,7 +470,7 @@ class _RegisterWizardState extends State<RegisterWizard> {
                       ),
                     ],
                   ),
-                  padding: const EdgeInsets.all(28),
+                  padding: EdgeInsets.all(_step == 2 ? 16 : 28),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -502,15 +488,15 @@ class _RegisterWizardState extends State<RegisterWizard> {
                                   color: _textMuted, fontSize: 13)),
                         ]),
                       ),
-                      const SizedBox(height: 28),
+                      SizedBox(height: _step == 2 ? 10 : 28),
 
                       if (_step == 0) _buildStep1(),
                       if (_step == 1) _buildStep2(),
                       if (_step == 2) _buildStep3(),
 
-                      const SizedBox(height: 24),
+                      SizedBox(height: _step == 2 ? 6 : 24),
                       const Divider(color: _borderClr),
-                      const SizedBox(height: 16),
+                      SizedBox(height: _step == 2 ? 6 : 16),
 
                       // Buttons
                       Row(children: [
@@ -554,7 +540,7 @@ class _RegisterWizardState extends State<RegisterWizard> {
             ),
             // ── Back button overlay — always top-left ────────────────
             Positioned(
-              top: 16,
+              top: 12,
               left: 16,
               child: GestureDetector(
                 onTap: _back,
@@ -710,7 +696,7 @@ class _RegisterWizardState extends State<RegisterWizard> {
             return null;
           },
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 10),
         const _FieldLabel('Password'),
         const SizedBox(height: 8),
         _LightFormField(
@@ -734,7 +720,7 @@ class _RegisterWizardState extends State<RegisterWizard> {
             return null;
           },
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 10),
         const _FieldLabel('Confirm Password'),
         const SizedBox(height: 8),
         _LightFormField(
@@ -758,11 +744,11 @@ class _RegisterWizardState extends State<RegisterWizard> {
             return null;
           },
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
 
         // ── Terms & Conditions checkbox ───────────────────────────
         GestureDetector(
-          onTap: () => setState(() => _agreedToTerms = !_agreedToTerms),
+          onTap: () => setState(() { _agreedToTerms = !_agreedToTerms; _termsError = false; }),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -841,6 +827,19 @@ class _RegisterWizardState extends State<RegisterWizard> {
             ],
           ),
         ),
+        if (_termsError) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: _errorClr, size: 15),
+              const SizedBox(width: 6),
+              const Text(
+                'Please agree to the Terms & Conditions to continue.',
+                style: TextStyle(color: _errorClr, fontSize: 12),
+              ),
+            ],
+          ),
+        ],
       ]),
     );
   }
