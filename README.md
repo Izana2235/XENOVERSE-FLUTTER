@@ -359,20 +359,3 @@ All data changes sync automatically across connected clients via Firestore liste
 
 ---
 
-## 13. Support & Maintenance
-
-### 13.1 Troubleshooting
-- Check Flutter/Dart versions
-- Clear build cache: `flutter clean`
-- Reinstall dependencies: `flutter pub get`
-- Review Firebase console for errors
-
-### 13.2 Updates
-- Keep Flutter SDK updated
-- Monitor Firebase service changes
-- Apply security patches regularly
-
-### 13.3 Support Contact
-For technical support and inquiries, contact the development team.
-
----
