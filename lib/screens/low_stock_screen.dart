@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 import '../models/app_state.dart';
 
+
+// ── Extract currency symbol from appState.currency string ─────────────────────
+String _currencySymbol(String currency) {
+  final match = RegExp(r'\((.+?)\)').firstMatch(currency);
+  return match != null ? match.group(1)! : '₱';
+}
+
+
 class LowStockScreen extends StatelessWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
@@ -216,7 +224,7 @@ class LowStockScreen extends StatelessWidget {
                                     Expanded(
                                       flex: 2,
                                       child: Text(
-                                        '₱${p.price.toStringAsFixed(2)}',
+                                        '${_currencySymbol(appState.currency)}${p.price.toStringAsFixed(2)}',
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,
                                         style: TextStyle(

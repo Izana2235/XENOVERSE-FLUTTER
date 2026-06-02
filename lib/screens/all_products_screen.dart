@@ -1,8 +1,16 @@
+import 'dart:async'; 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:firebase_auth/firebase_auth.dart'; 
+
 import '../models/app_state.dart';
 import '../widgets/product_form_dialog.dart';
 import '../widgets/page_header.dart';
-import '../services/api_service.dart'; // 🌟 Added WebApiService import
+
+String _currencySymbol(String currency) {
+  final match = RegExp(r'\((.+?)\)').firstMatch(currency);
+  return match != null ? match.group(1)! : '₱';
+}
 
 class AllProductsScreen extends StatefulWidget {
   final AppState appState;
@@ -16,34 +24,74 @@ class AllProductsScreen extends StatefulWidget {
 class _AllProductsScreenState extends State<AllProductsScreen> {
   String _cat = 'All';
   String _search = '';
-  bool _isLoading = true; // 🌟 1. Added loading state
+  bool _isLoading = true;
+  StreamSubscription? _productSubscription; 
 
-  // 🌟 2. Added initState to fetch data when screen opens
   @override
   void initState() {
     super.initState();
-    _fetchLiveDatabase();
+    _listenToLiveProducts();
   }
 
-  Future<void> _fetchLiveDatabase() async {
-  try {
-    final liveData = await WebApiService.getProducts(); 
-    if (mounted) {
-      setState(() {
-        // 🌟 Use clear and addAll for a cleaner state update
-        widget.appState.products.clear();
-        widget.appState.products.addAll(liveData);
-        _isLoading = false;
-      });
-      widget.onStateChanged(); 
+  @override
+  void dispose() {
+    _productSubscription?.cancel(); 
+    super.dispose();
+  }
+
+  void _listenToLiveProducts() {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
     }
-  } catch (e) {
-    print("Web Fetch Error: $e");
-    if (mounted) setState(() => _isLoading = false);
-  }
-}
 
+    _productSubscription = FirebaseFirestore.instance
+        .collection('products')
+        .where('user_id', isEqualTo: currentUser.email) 
+        .snapshots()
+        .listen((snapshot) {
+      
+      final List<Product> freshProducts = [];
+      
+      for (var doc in snapshot.docs) {
+        final data = Map<String, dynamic>.from(doc.data());
+        
+        // 🌟 THE FIX: Hides the product if it was soft-deleted!
+        if (data['is_deleted'] == true) continue;
+
+        freshProducts.add(Product(
+          id: doc.id, 
+          name: data['name'] ?? 'Unnamed',
+          category: data['category'] ?? 'Uncategorized',
+          price: double.tryParse(data['price']?.toString() ?? '0') ?? 0.0,
+          cost: double.tryParse(data['cost']?.toString() ?? '0') ?? 0.0,
+          taxRate: double.tryParse(data['taxRate']?.toString() ?? '0') ?? 0.0,
+          sku: data['sku'] ?? '',
+          barcode: data['barcode'] ?? '',
+          stock: int.tryParse(data['stock']?.toString() ?? '0') ?? 0,
+          imageUrl: data['imageUrl'] ?? data['image_url'] ?? '',
+          description: data['description'] ?? '',
+        ));
+      }
+
+      if (mounted) {
+        setState(() {
+          widget.appState.products.clear();
+          widget.appState.products.addAll(freshProducts);
+          _isLoading = false;
+        });
+        widget.onStateChanged(); 
+      }
+    }, onError: (error) {
+      print("🔥 Firebase Listen Error: $error");
+      if (mounted) setState(() => _isLoading = false);
+    });
+  }
+
+  // 👇 THESE ARE THE FUNCTIONS THAT ACCIDENTALLY GOT DELETED
   List<String> get cats => ['All', ...widget.appState.categoryNames];
+  
   List<Product> get filtered => widget.appState.products.where((p) {
     final ok1 = _cat == 'All' || p.category == _cat;
     final ok2 = p.name.toLowerCase().contains(_search.toLowerCase());
@@ -53,23 +101,36 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
   void _openAddDialog() {
     showDialog(context: context, builder: (_) => ProductFormDialog(
       categories: widget.appState.categoryNames,
+      currencySymbol: widget.appState.currencySymbol,
       onSave: (p) async { 
-        setState(() => _isLoading = true); // Show spinner
-        
-        // 1. Send it to your Node.js Database!
-        bool success = await WebApiService.addProduct({
-          "name": p.name,
-          "category": p.category,
-          "price": p.price,
-          "stock": p.stock,
-          "barcode": "WEB-${DateTime.now().millisecondsSinceEpoch}" // Generate fake barcode
-        });
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser == null) return;
 
-        // 2. If successful, refresh the list from the server!
-        if (success) {
-          _fetchLiveDatabase(); 
-        } else {
-          setState(() => _isLoading = false);
+        setState(() => _isLoading = true); 
+        
+        try {
+          // 🌟 THE FIX: Generate a strict NUMBER ID so Android's SQLite database can read it perfectly!
+          String newId = DateTime.now().millisecondsSinceEpoch.toString();
+          
+          await FirebaseFirestore.instance.collection('products').doc(newId).set({
+            "id": int.parse(newId), // We explicitly hand Android the number format!
+            "name": p.name,
+            "category": p.category,
+            "price": p.price,
+            "cost": p.cost,
+            "taxRate": p.taxRate,
+            "sku": p.sku,
+            "barcode": p.barcode,
+            "stock": p.stock,
+            "imageUrl": p.imageUrl,
+            "description": p.description,
+            "user_id": currentUser.email, 
+            "createdAt": FieldValue.serverTimestamp(),
+          });
+        } catch (e) {
+          print("Error adding product: $e");
+        } finally {
+          if (mounted) setState(() => _isLoading = false);
         }
       },
     ));
@@ -77,27 +138,34 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
 
   void _openEditDialog(Product p) {
     showDialog(context: context, builder: (_) => ProductFormDialog(
-      product: p, categories: widget.appState.categoryNames,
+      product: p, 
+      categories: widget.appState.categoryNames,
+      currencySymbol: widget.appState.currencySymbol,
       onSave: (updated) async { 
-        setState(() => _isLoading = true); // Show spinner
+        setState(() => _isLoading = true);
         
-        // 1. Update the database!
-        bool success = await WebApiService.updateProduct(p.id, {
-          "name": updated.name,
-          "category": updated.category,
-          "price": updated.price,
-          "stock": updated.stock,
-        });
-
-        // 2. If successful, refresh the list from the server!
-        if (success) {
-          _fetchLiveDatabase();
-        } else {
-          setState(() => _isLoading = false);
+        try {
+          await FirebaseFirestore.instance.collection('products').doc(p.id).update({
+            "name": updated.name,
+            "category": updated.category,
+            "price": updated.price,
+            "cost": updated.cost,
+            "taxRate": updated.taxRate,
+            "sku": updated.sku,
+            "barcode": updated.barcode,
+            "stock": updated.stock,
+            "imageUrl": updated.imageUrl,
+            "description": updated.description,
+          });
+        } catch (e) {
+           print("Error updating product: $e");
+        } finally {
+           if (mounted) setState(() => _isLoading = false);
         }
       },
     ));
   }
+  // 👆 
 
   void _confirmDelete(Product p) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -111,18 +179,13 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
           onPressed: () async { 
-            Navigator.pop(context); // Close dialog first
+            Navigator.pop(context); 
             
-            // 🌟 Show a quick loading indicator if you want, or just await the delete
-            bool success = await WebApiService.deleteProduct(p.id);
-            
-            if (success) {
-               // 🌟 Only remove from the UI if the server successfully deleted it
-               widget.appState.deleteProduct(p.id); 
-               setState(() {}); 
-               widget.onStateChanged(); 
-            } else {
-               // Optional: Show an error snackbar if it failed
+            try {
+              // 🌟 THE HARD DELETE FIX: Completely vaporize the item from Firebase!
+              await FirebaseFirestore.instance.collection('products').doc(p.id).delete();
+              
+            } catch (e) {
                if (mounted) {
                  ScaffoldMessenger.of(context).showSnackBar(
                    const SnackBar(content: Text('Failed to delete product from server.')),
@@ -145,7 +208,6 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
     final bgSearch = isDark ? const Color(0xFF252840) : const Color(0xFFF3F4F6);
     final isMobile = MediaQuery.of(context).size.width < 700;
 
-    // 🌟 3. Show a loading spinner while downloading from your Node.js server
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator(color: Color(0xFF4B6BFB)));
     }
@@ -156,28 +218,9 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
         PageHeader(
           title: 'All Products',
           subtitle: 'Manage your product catalog',
-          // 🌟 HERE IS THE FIX: We changed 'trailing' to a Row to hold both buttons!
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 🔄 NEW: The Live Sync Button
-              Container(
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white12 : const Color(0xFFF3F4F6),
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.sync, color: Color(0xFF4B6BFB)),
-                  tooltip: 'Pull fresh data from Android',
-                  onPressed: () {
-                    // This triggers the screen to redownload data from Node.js
-                    setState(() => _isLoading = true);
-                    _fetchLiveDatabase();
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              // ➕ EXISTING: Add Product Button
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF4B6BFB), foregroundColor: Colors.white,
@@ -216,29 +259,33 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
             ),
           ]),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
+        
         Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: bgCard, borderRadius: BorderRadius.circular(12),
-              border: isDark ? null : Border.all(color: const Color(0xFFE5E7EB)),
-            ),
-            child: Column(children: [
-              if (!isMobile) _header(textMuted),
-              Divider(color: isDark ? Colors.white12 : const Color(0xFFE5E7EB), height: 1),
-              Expanded(
-                child: filtered.isEmpty
-                    ? Center(child: Text('No products found', style: TextStyle(color: textMuted)))
-                    : ListView.separated(
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => Divider(color: isDark ? Colors.white12 : const Color(0xFFE5E7EB), height: 1),
-                        itemBuilder: (_, i) => isMobile
-                            ? _mobileTile(filtered[i], isDark, textPrimary, textMuted)
-                            : _desktopRow(filtered[i], isDark, textPrimary, textMuted),
-                      ),
+          child: filtered.isEmpty
+            ? Center(child: Text('No products found', style: TextStyle(color: textMuted)))
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  int crossAxisCount = 2;
+                  if (constraints.maxWidth > 1200) {
+                    crossAxisCount = 5;
+                  } else if (constraints.maxWidth > 900) crossAxisCount = 4;
+                  else if (constraints.maxWidth > 600) crossAxisCount = 3;
+
+                  return GridView.builder(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      childAspectRatio: 0.75, 
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      return _buildProductCard(filtered[index], isDark, textPrimary, textMuted, bgCard);
+                    },
+                  );
+                },
               ),
-            ]),
-          ),
         ),
       ]),
     );
@@ -263,86 +310,149 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
     );
   }
 
-  Widget _header(Color textMuted) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      child: Row(children: [
-        Expanded(flex: 4, child: Text('Product', style: TextStyle(color: textMuted, fontWeight: FontWeight.w600, fontSize: 12))),
-        Expanded(flex: 2, child: Text('Category', style: TextStyle(color: textMuted, fontWeight: FontWeight.w600, fontSize: 12))),
-        Expanded(flex: 2, child: Text('Price', style: TextStyle(color: textMuted, fontWeight: FontWeight.w600, fontSize: 12))),
-        Expanded(flex: 2, child: Text('Stock', style: TextStyle(color: textMuted, fontWeight: FontWeight.w600, fontSize: 12))),
-        Expanded(flex: 2, child: Text('Actions', style: TextStyle(color: textMuted, fontWeight: FontWeight.w600, fontSize: 12))),
-      ]),
-    );
-  }
-
-  Widget _desktopRow(Product p, bool isDark, Color textPrimary, Color textMuted) {
+  Widget _buildProductCard(Product p, bool isDark, Color textPrimary, Color textMuted, Color bgCard) {
     final isLow = p.isLowStock;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      child: Row(children: [
-        Expanded(flex: 4, child: Row(children: [
-          ClipRRect(borderRadius: BorderRadius.circular(7),
-            // 🌟 4. Fixed Image URL to point to your Node.js Server
-            child: Image.network("${WebApiService.baseUrl}${p.imageUrl ?? ''}", width: 40, height: 40, fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(width: 40, height: 40,
-                color: isDark ? Colors.white12 : const Color(0xFFF3F4F6),
-                child: Icon(Icons.image, color: isDark ? Colors.white38 : Colors.black26, size: 18)))),
-          const SizedBox(width: 10),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(p.name, style: TextStyle(color: textPrimary, fontWeight: FontWeight.w500, fontSize: 13)),
-            Text('ID: ${p.id}', style: TextStyle(color: textMuted, fontSize: 11)),
-          ]),
-        ])),
-        Expanded(flex: 2, child: Text(p.category, style: TextStyle(color: textMuted, fontSize: 13))),
-        Expanded(flex: 2, child: Text('₱${p.price.toStringAsFixed(2)}',
-          style: TextStyle(color: textPrimary, fontWeight: FontWeight.w500, fontSize: 13))),
-        Expanded(flex: 2, child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: (isLow ? const Color(0xFFF5C518) : const Color(0xFF22C88A)).withOpacity(0.2),
-            borderRadius: BorderRadius.circular(20)),
-          child: Text('${p.stock} units', style: TextStyle(
-            color: isLow ? const Color(0xFFF5C518) : const Color(0xFF22C88A),
-            fontWeight: FontWeight.w600, fontSize: 12)))),
-        Expanded(flex: 2, child: Row(children: [
-          IconButton(icon: const Icon(Icons.edit_outlined, color: Color(0xFF4B6BFB), size: 18), onPressed: () => _openEditDialog(p)),
-          IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18), onPressed: () => _confirmDelete(p)),
-        ])),
-      ]),
-    );
-  }
+    final currency = _currencySymbol(widget.appState.currency);
+    
+    final displayImage = p.imageUrl.isNotEmpty 
+        ? p.imageUrl 
+        : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=80&h=80&fit=crop';
 
-  Widget _mobileTile(Product p, bool isDark, Color textPrimary, Color textMuted) {
-    final isLow = p.isLowStock;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(children: [
-        ClipRRect(borderRadius: BorderRadius.circular(8),
-          // 🌟 5. Fixed Image URL for Mobile view
-          child: Image.network("${WebApiService.baseUrl}${p.imageUrl ?? ''}", width: 44, height: 44, fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(width: 44, height: 44,
-              color: isDark ? Colors.white12 : const Color(0xFFF3F4F6),
-              child: Icon(Icons.image, color: isDark ? Colors.white38 : Colors.black26)))),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(p.name, style: TextStyle(color: textPrimary, fontWeight: FontWeight.w500, fontSize: 13)),
-          Text('${p.category} • ₱${p.price.toStringAsFixed(2)}', style: TextStyle(color: textMuted, fontSize: 11)),
-          const SizedBox(height: 3),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: (isLow ? const Color(0xFFF5C518) : const Color(0xFF22C88A)).withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10)),
-            child: Text('${p.stock} units', style: TextStyle(
-              color: isLow ? const Color(0xFFF5C518) : const Color(0xFF22C88A),
-              fontSize: 11, fontWeight: FontWeight.w600))),
-        ])),
-        Row(children: [
-          IconButton(icon: const Icon(Icons.edit_outlined, color: Color(0xFF4B6BFB), size: 18), onPressed: () => _openEditDialog(p)),
-          IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18), onPressed: () => _confirmDelete(p)),
-        ]),
-      ]),
+    return Container(
+      decoration: BoxDecoration(
+        color: bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: isDark ? Border.all(color: Colors.white12) : Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: isDark ? [] : [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 5,
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: Container(
+                    width: double.infinity,
+                    color: isDark ? const Color(0xFF252840) : const Color(0xFFF3F4F6),
+                    child: Image.network(
+                      displayImage,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Icon(
+                        Icons.fastfood_outlined, 
+                        size: 40, 
+                        color: isDark ? Colors.white24 : Colors.black12,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.black54 : Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.all(6),
+                          icon: const Icon(Icons.edit_outlined, color: Color(0xFF4B6BFB), size: 16),
+                          onPressed: () => _openEditDialog(p),
+                        ),
+                        IconButton(
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.all(6),
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 16),
+                          onPressed: () => _confirmDelete(p),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          Expanded(
+            flex: 4,
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        p.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        p.category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '$currency${p.price.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: Color(0xFF4B6BFB),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: (isLow ? const Color(0xFFF5C518) : const Color(0xFF22C88A)).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${p.stock} left',
+                          style: TextStyle(
+                            color: isLow ? const Color(0xFFF5C518) : const Color(0xFF22C88A),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

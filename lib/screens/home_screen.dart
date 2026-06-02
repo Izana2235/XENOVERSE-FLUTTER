@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import '../models/app_state.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HomeScreen — Shopify-style cinematic landing page
@@ -9,8 +10,9 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback? onLogin;
   final VoidCallback? onCreateAccount;
   final VoidCallback? onBackToLanding;
+  final AppState? appState;
 
-  const HomeScreen({super.key, this.onLogin, this.onCreateAccount, this.onBackToLanding});
+  const HomeScreen({super.key, this.onLogin, this.onCreateAccount, this.onBackToLanding, this.appState});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -55,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen>
     _textCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1400));
     _bgCtrl = AnimationController(
-        vsync: this, duration: const Duration(seconds: 12))
+        vsync: this, duration: const Duration(seconds: 3))
       ..repeat();
 
     _titleFade = CurvedAnimation(
@@ -101,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width < 750;
+    // Static — not connected to appState
 
     void goLogin() {
       if (widget.onLogin != null) {
@@ -268,8 +271,8 @@ class _NavBar extends StatelessWidget {
 
         if (!isMobile) ...[
           _NavItem('Features', onTap: onFeaturesTap),
-          _NavItem('How It Works', onTap: onHowItWorksTap),
           _NavItem('Pricing', onTap: onPricingTap),
+          _NavItem('How It Works', onTap: onHowItWorksTap),
           const SizedBox(width: 16),
         ],
 
@@ -478,10 +481,10 @@ class _CinematicBgPainter extends CustomPainter {
 
     // Large slow-moving colored light blobs — cinematic feel
     final blobs = [
-      _BlobData(0.85, 0.2, 420, const Color(0xFF1a1060), 0.0),
-      _BlobData(0.65, 0.55, 380, const Color(0xFF0d1855), 0.25),
-      _BlobData(0.9, 0.75, 300, const Color(0xFF0a0f30), 0.5),
-      _BlobData(0.5, 0.15, 280, const Color(0xFF180830), 0.7),
+      const _BlobData(0.85, 0.2, 420, Color(0xFF1a1060), 0.0),
+      const _BlobData(0.65, 0.55, 380, Color(0xFF0d1855), 0.25),
+      const _BlobData(0.9, 0.75, 300, Color(0xFF0a0f30), 0.5),
+      const _BlobData(0.5, 0.15, 280, Color(0xFF180830), 0.7),
     ];
 
     for (final b in blobs) {
@@ -563,7 +566,7 @@ class _TrustedSection extends StatelessWidget {
           spacing: isMobile ? 28 : 56,
           runSpacing: 20,
           alignment: WrapAlignment.center,
-          children: [
+          children: const [
             _TrustBadge(Icons.store_outlined, 'Retail Shops'),
             _TrustBadge(Icons.restaurant_outlined, 'Restaurants'),
             _TrustBadge(Icons.checkroom_outlined, 'Boutiques'),
@@ -664,24 +667,24 @@ class _FeaturesSection extends StatelessWidget {
   }
 
   List<Widget> _featureCards() => [
-        _FeatureCard(Icons.inventory_2_outlined, 'Inventory Management',
+        const _FeatureCard(Icons.inventory_2_outlined, 'Inventory Management',
             'Real-time stock tracking with automatic low-stock alerts.',
-            const Color(0xFF4B6BFB)),
-        _FeatureCard(Icons.bar_chart_rounded, 'Sales Analytics',
+            Color(0xFF4B6BFB)),
+        const _FeatureCard(Icons.bar_chart_rounded, 'Sales Analytics',
             'Beautiful charts showing revenue, orders, and top products.',
-            const Color(0xFF7C3AED)),
-        _FeatureCard(Icons.auto_awesome_outlined, 'AI Predictions',
+            Color(0xFF7C3AED)),
+        const _FeatureCard(Icons.auto_awesome_outlined, 'AI Predictions',
             'Forecast demand and get smart restocking recommendations.',
-            const Color(0xFF06B6D4)),
-        _FeatureCard(Icons.receipt_long_outlined, 'Order History',
+            Color(0xFF06B6D4)),
+        const _FeatureCard(Icons.receipt_long_outlined, 'Order History',
             'Full transaction log with search and export support.',
-            const Color(0xFF22C88A)),
-        _FeatureCard(Icons.category_outlined, 'Categories',
+            Color(0xFF22C88A)),
+        const _FeatureCard(Icons.category_outlined, 'Categories',
             'Organize products for faster checkout and reporting.',
-            const Color(0xFFF59E0B)),
-        _FeatureCard(Icons.devices_outlined, 'Multi-Device',
+            Color(0xFFF59E0B)),
+        const _FeatureCard(Icons.devices_outlined, 'Multi-Device',
             'Works seamlessly on desktop and mobile browsers.',
-            const Color(0xFFEF4444)),
+            Color(0xFFEF4444)),
       ];
 }
 
@@ -800,11 +803,11 @@ class _DashboardPreview extends StatelessWidget {
           child: Column(children: [
             // Window chrome
             Row(children: [
-              _Dot(Colors.redAccent),
+              const _Dot(Colors.redAccent),
               const SizedBox(width: 6),
-              _Dot(const Color(0xFFF59E0B)),
+              const _Dot(Color(0xFFF59E0B)),
               const SizedBox(width: 6),
-              _Dot(const Color(0xFF22C88A)),
+              const _Dot(Color(0xFF22C88A)),
               const SizedBox(width: 16),
               Expanded(
                 child: Container(
@@ -825,40 +828,40 @@ class _DashboardPreview extends StatelessWidget {
 
             // Dashboard stats row
             isMobile
-                ? Column(children: [
+                ? const Column(children: [
                     Row(children: [
                       Expanded(
                           child: _StatBox(
                               'Total Revenue', '₱48,290', '+12.5%', true)),
-                      const SizedBox(width: 10),
+                      SizedBox(width: 10),
                       Expanded(
                           child: _StatBox(
                               'Orders', '284', '+8.3%', true)),
                     ]),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10),
                     Row(children: [
                       Expanded(
                           child: _StatBox(
                               'Low Stock', '5 items', 'Alert', false)),
-                      const SizedBox(width: 10),
+                      SizedBox(width: 10),
                       Expanded(
                           child: _StatBox(
                               'Products', '42', 'Active', true)),
                     ]),
                   ])
-                : Row(children: [
+                : const Row(children: [
                     Expanded(
                         child: _StatBox(
                             'Total Revenue', '₱48,290', '+12.5%', true)),
-                    const SizedBox(width: 10),
+                    SizedBox(width: 10),
                     Expanded(
                         child:
                             _StatBox('Orders', '284', '+8.3%', true)),
-                    const SizedBox(width: 10),
+                    SizedBox(width: 10),
                     Expanded(
                         child: _StatBox(
                             'Low Stock', '5 items', 'Alert', false)),
-                    const SizedBox(width: 10),
+                    SizedBox(width: 10),
                     Expanded(
                         child:
                             _StatBox('Products', '42', 'Active', true)),
@@ -1292,7 +1295,7 @@ class _FooterSection extends StatelessWidget {
           ),
         ]),
         const Spacer(),
-        Text('© 2025 Xenoverse POS',
+        Text('© 2026 Xenoverse POS',
             style: TextStyle(
                 color: Colors.white.withOpacity(0.2), fontSize: 12)),
       ]),

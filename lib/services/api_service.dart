@@ -1,36 +1,37 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../models/app_state.dart'; // Pointing to their Product model
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 🌟 THE FIX: Imported Auth to grab your email!
+import '../models/app_state.dart'; 
 
 class WebApiService {
-  // 🌟 FIXED: Kept the correct IP address right here at the class level
-  static const String baseUrl = 'http://192.168.1.16:3000';
+  static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  // 🌟 Helper to get the current user's email securely
+  static String get _currentUserEmail {
+    return FirebaseAuth.instance.currentUser?.email ?? 'admin';
+  }
+
+  // --- FETCH PRODUCTS ---
   static Future<List<Product>> getProducts() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/products')).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        List<dynamic> data = jsonDecode(response.body);
-        
-        return data.map((json) => Product(
-          id: json['id'].toString(),
-          name: json['name'] ?? 'Unnamed',
-          category: json['category'] ?? 'General',
-          
-          // 🌟 THE FIX: Bulletproof parsing exactly like your Android app!
-          price: double.tryParse(json['price']?.toString() ?? '0') ?? 0.0,
-          stock: int.tryParse(json['stock']?.toString() ?? '0') ?? 0,
-          
-          // 🌟 THE MAGIC SHIELD: Added ?? '' to stop the null errors!
-          imageUrl: json['image_url'] ?? '', 
-          description: json['description'] ?? '', 
-        )).toList();
-      } else {
-        throw Exception("Failed to load products: ${response.statusCode}");
-      }
+      // 🌟 THE FIX: Only fetch products that belong to YOU
+      final snapshot = await _db.collection('products')
+          .where('user_id', isEqualTo: _currentUserEmail)
+          .get();
+      
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return Product(
+          id: doc.id,
+          name: data['name'] ?? 'Unnamed',
+          category: data['category'] ?? 'General',
+          price: double.tryParse(data['price']?.toString() ?? '0') ?? 0.0,
+          stock: int.tryParse(data['stock']?.toString() ?? '0') ?? 0,
+          imageUrl: data['image_path'] ?? data['image_url'] ?? '', 
+          description: data['description'] ?? '', 
+        );
+      }).toList();
     } catch (e) {
-      print("Web Fetch Error: $e");
+      print("❌ Firebase Fetch Error: $e");
       return [];
     }
   }
@@ -38,18 +39,11 @@ class WebApiService {
   // --- DELETE A PRODUCT ---
   static Future<bool> deleteProduct(String id) async {
     try {
-      // Tells your Node.js server to delete this specific ID
-      final response = await http.delete(Uri.parse('$baseUrl/products/$id'));
-      
-      if (response.statusCode == 200) {
-        print("🗑️ Successfully deleted from database!");
-        return true;
-      } else {
-        print("❌ Failed to delete: ${response.statusCode}");
-        return false;
-      }
+      await _db.collection('products').doc(id).delete();
+      print("🗑️ Successfully deleted from Firebase!");
+      return true;
     } catch (e) {
-      print("❌ Web Delete Error: $e");
+      print("❌ Firebase Delete Error: $e");
       return false;
     }
   }
@@ -57,28 +51,39 @@ class WebApiService {
   // --- FETCH ORDERS (For Revenue) ---
   static Future<List<dynamic>> getOrders() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/orders')).timeout(const Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      }
-      return [];
+      final snapshot = await _db.collection('orders')
+          .where('user_id', isEqualTo: _currentUserEmail)
+          .get();
+      return snapshot.docs.map((doc) => doc.data()).toList();
     } catch (e) {
       print("❌ Order Fetch Error: $e");
       return [];
     }
   }
+
   // --- ADD A PRODUCT FROM WEB ---
   static Future<bool> addProduct(Map<String, dynamic> productData) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/products'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(productData),
-      );
-      // 200 or 201 means successful creation!
-      return response.statusCode == 200 || response.statusCode == 201; 
+      String docId = DateTime.now().millisecondsSinceEpoch.toString();
+      
+      await _db.collection('products').doc(docId).set({
+        'id': int.parse(docId), 
+        'name': productData['name'],
+        'category': productData['category'],
+        'price': productData['price'],
+        'cost': productData['cost'] ?? 0.0,
+        'taxRate': productData['taxRate'] ?? 0.0,
+        'sku': productData['sku'] ?? '',
+        'barcode': productData['barcode'] ?? '',
+        'stock': productData['stock'],
+        'image_path': productData['imageUrl'] ?? '', 
+        'description': productData['description'] ?? '',
+        'is_synced': 1,
+        'user_id': _currentUserEmail, // 🌟 THE FIX: Stamp your email so Android sees it!
+      });
+      return true;
     } catch (e) {
-      print("❌ Add Error: $e");
+      print("❌ Firebase Add Error: $e");
       return false;
     }
   }
@@ -86,14 +91,81 @@ class WebApiService {
   // --- UPDATE A PRODUCT FROM WEB ---
   static Future<bool> updateProduct(String id, Map<String, dynamic> productData) async {
     try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/products/$id'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(productData),
-      );
-      return response.statusCode == 200;
+      await _db.collection('products').doc(id).update({
+        'name': productData['name'],
+        'category': productData['category'],
+        'price': productData['price'],
+        'cost': productData['cost'],
+        'taxRate': productData['taxRate'],
+        'sku': productData['sku'],
+        'barcode': productData['barcode'],
+        'stock': productData['stock'],
+        'image_path': productData['imageUrl'], 
+        'description': productData['description'],
+      });
+      return true;
     } catch (e) {
       print("❌ Update Error: $e");
+      return false;
+    }
+  }
+
+  // ─── CATEGORY API METHODS ──────────────────────────────────────────
+
+  static Future<List<Category>> getCategories() async {
+    try {
+      // 🌟 THE FIX: Only fetch categories that belong to YOU
+      final snapshot = await _db.collection('categories')
+          .where('user_id', isEqualTo: _currentUserEmail)
+          .get();
+          
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return Category(
+          id: doc.id, // Safely use the Firebase Document ID as a String
+          name: data['name'] ?? '',
+          description: data['description'] ?? '',
+          icon: data['icon'] ?? '',
+        );
+      }).toList();
+    } catch (e) {
+      print("❌ Firebase Category Fetch Error: $e");
+      return [];
+    }
+  }
+
+  static Future<bool> addCategory(Map<String, dynamic> data) async {
+    try {
+      int uniqueId = DateTime.now().millisecondsSinceEpoch;
+      
+      // 🌟 THE FIX: Stamp your email so Firebase accepts it and Android downloads it!
+      data['id'] = uniqueId.toString(); 
+      data['user_id'] = _currentUserEmail; 
+      
+      await _db.collection('categories').doc(uniqueId.toString()).set(data);
+      return true;
+    } catch (e) {
+      print("❌ Firebase Category Add Error: $e");
+      return false;
+    }
+  }
+
+  static Future<bool> updateCategory(String id, Map<String, dynamic> data) async {
+    try {
+      await _db.collection('categories').doc(id).update(data);
+      return true;
+    } catch (e) {
+      print("❌ Firebase Category Update Error: $e");
+      return false;
+    }
+  }
+
+  static Future<bool> deleteCategory(String id) async {
+    try {
+      await _db.collection('categories').doc(id).delete();
+      return true;
+    } catch (e) {
+      print("❌ Firebase Category Delete Error: $e");
       return false;
     }
   }

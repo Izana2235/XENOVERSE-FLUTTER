@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:math' as math;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Xenoverse Landing Page — Modern Premium POS System Landing Page
@@ -185,7 +184,7 @@ class AnimatedBackground extends StatelessWidget {
                   animation.value,
                 )!,
               ],
-              stops: [0.0, 0.5, 1.0],
+              stops: const [0.0, 0.5, 1.0],
             ),
           ),
           child: Stack(
@@ -468,35 +467,35 @@ class FeaturesSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final features = [
-      _FeatureData(
+      const _FeatureData(
         title: 'Inventory Management',
         description:
             'Track stock levels, manage suppliers, and automate reordering.',
         icon: Icons.inventory,
       ),
-      _FeatureData(
+      const _FeatureData(
         title: 'Sales Analytics',
         description: 'Real-time insights into sales performance and trends.',
         icon: Icons.analytics,
       ),
-      _FeatureData(
+      const _FeatureData(
         title: 'AI Predictions',
         description:
             'Forecast demand and optimize inventory with machine learning.',
         icon: Icons.smart_toy,
       ),
-      _FeatureData(
+      const _FeatureData(
         title: 'Order History',
         description: 'Complete transaction records with detailed reporting.',
         icon: Icons.history,
       ),
-      _FeatureData(
+      const _FeatureData(
         title: 'Categories',
         description:
             'Organize products efficiently with customizable categories.',
         icon: Icons.category,
       ),
-      _FeatureData(
+      const _FeatureData(
         title: 'Multi-Device',
         description: 'Access your POS system from any device, anywhere.',
         icon: Icons.devices,
@@ -740,7 +739,7 @@ class DashboardPreviewSection extends StatelessWidget {
                 width: 1,
               ),
             ),
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Stats Row
@@ -751,19 +750,19 @@ class DashboardPreviewSection extends StatelessWidget {
                       value: '\$12,345',
                       icon: Icons.attach_money,
                     ),
-                    const SizedBox(width: 32),
+                    SizedBox(width: 32),
                     _DashboardStat(
                       title: 'Orders',
                       value: '156',
                       icon: Icons.shopping_cart,
                     ),
-                    const SizedBox(width: 32),
+                    SizedBox(width: 32),
                     _DashboardStat(
                       title: 'Low Stock',
                       value: '8',
                       icon: Icons.warning,
                     ),
-                    const SizedBox(width: 32),
+                    SizedBox(width: 32),
                     _DashboardStat(
                       title: 'Products',
                       value: '1,234',
@@ -771,10 +770,10 @@ class DashboardPreviewSection extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 48),
+                SizedBox(height: 48),
 
                 // Chart
-                const Text(
+                Text(
                   'Weekly Sales',
                   style: TextStyle(
                     color: Colors.white,
@@ -783,13 +782,13 @@ class DashboardPreviewSection extends StatelessWidget {
                     fontFamily: 'Inter',
                   ),
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 _SalesChart(),
 
-                const SizedBox(height: 48),
+                SizedBox(height: 48),
 
                 // Product List
-                const Text(
+                Text(
                   'Recent Products',
                   style: TextStyle(
                     color: Colors.white,
@@ -798,7 +797,7 @@ class DashboardPreviewSection extends StatelessWidget {
                     fontFamily: 'Inter',
                   ),
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 _ProductList(),
               ],
             ),
@@ -896,10 +895,10 @@ class _ProductList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final products = [
-      _ProductData('Wireless Headphones', 45),
-      _ProductData('Smart Watch', 12),
-      _ProductData('Laptop Stand', 78),
-      _ProductData('USB Cable', 156),
+      const _ProductData('Wireless Headphones', 45),
+      const _ProductData('Smart Watch', 12),
+      const _ProductData('Laptop Stand', 78),
+      const _ProductData('USB Cable', 156),
     ];
 
     return Column(
@@ -1003,7 +1002,7 @@ class AnimatedNavbar extends StatelessWidget {
             const SizedBox(width: 32),
             _NavItem('Pricing', () {}),
             const SizedBox(width: 32),
-            _NavItem('Support', () {}),
+            _NavItem('How It Works', () {}),
             const SizedBox(width: 32),
             _NavItem('Sign In', () {}),
           ],

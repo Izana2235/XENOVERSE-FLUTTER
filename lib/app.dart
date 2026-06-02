@@ -170,7 +170,7 @@ class _AdminShellState extends State<AdminShell> {
       // ── Orders ──────────────────────────────────────────────────
       case 'orders':
       case 'order_history':
-        return const OrderHistoryScreen();
+        return OrderHistoryScreen(appState: appState);
 
       // ── Inventory ────────────────────────────────────────────────
       case 'stock_alerts':
@@ -183,15 +183,14 @@ class _AdminShellState extends State<AdminShell> {
           onStateChanged: _rebuild,
         );
 
-      // ── Reports ──────────────────────────────────────────────────
       case 'sales_report':
-        return const SalesReportScreen();
+        return SalesReportScreen(appState: appState);
       case 'inventory_report':
         return other.InventoryReportScreen(appState: appState);
       case 'customer_report':
-        return const other.CustomerReportScreen();
+        return other.CustomerReportScreen(appState: appState);
       case 'financial_report':
-        return const other.FinancialReportScreen();
+        return other.FinancialReportScreen(appState: appState);
 
       // ── Settings ─────────────────────────────────────────────────
       case 'settings_theme':

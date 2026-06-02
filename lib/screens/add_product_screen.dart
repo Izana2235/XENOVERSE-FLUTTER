@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🌟 THE FIX: Added Firestore
+import 'package:firebase_auth/firebase_auth.dart'; // 🌟 THE FIX: Added Auth to grab your email
 import '../models/app_state.dart';
 import '../widgets/page_header.dart';
+import '../services/api_service.dart'; 
 
 class AddProductScreen extends StatefulWidget {
   final AppState appState;
@@ -13,12 +16,20 @@ class AddProductScreen extends StatefulWidget {
 
 class _AddProductScreenState extends State<AddProductScreen> {
   final _formKey = GlobalKey<FormState>();
+  
+  // 🌟 Controllers
   final _name = TextEditingController();
   final _price = TextEditingController();
+  final _cost = TextEditingController();
+  final _taxRate = TextEditingController();
+  final _sku = TextEditingController();
+  final _barcode = TextEditingController();
   final _stock = TextEditingController();
   final _imageUrl = TextEditingController();
   final _description = TextEditingController();
+  
   String? _selectedCategory;
+  bool _isLoading = false; 
 
   @override
   void initState() {
@@ -30,33 +41,93 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   @override
   void dispose() {
-    _name.dispose(); _price.dispose(); _stock.dispose();
-    _imageUrl.dispose(); _description.dispose();
+    _name.dispose(); 
+    _price.dispose(); 
+    _cost.dispose();
+    _taxRate.dispose();
+    _sku.dispose();
+    _barcode.dispose();
+    _stock.dispose();
+    _imageUrl.dispose(); 
+    _description.dispose();
     super.dispose();
   }
 
-  void _save(bool isDark) {
+  void _save(bool isDark) async {
     if (!_formKey.currentState!.validate()) return;
-    widget.appState.addProduct(Product(
-      id: 'P${DateTime.now().millisecondsSinceEpoch}',
-      name: _name.text.trim(),
-      category: _selectedCategory ?? '',
-      price: double.tryParse(_price.text) ?? 0,
-      stock: int.tryParse(_stock.text) ?? 0,
-      imageUrl: _imageUrl.text.trim().isEmpty
-          ? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=80&h=80&fit=crop'
-          : _imageUrl.text.trim(),
-      description: _description.text.trim(),
-    ));
-    widget.onStateChanged();
-    _name.clear(); _price.clear(); _stock.clear(); _imageUrl.clear(); _description.clear();
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: const Text('Product added successfully! ✅'),
-      backgroundColor: const Color(0xFF22C88A),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    ));
+    
+    setState(() => _isLoading = true);
+
+    try {
+      // 🌟 THE FIX: Grab the currently logged-in user to stamp their email!
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) throw Exception("User not logged in");
+
+      // 🌟 THE FIX: Generate a strict NUMBER ID for Android's SQLite database!
+      String newId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      final productData = {
+        "id": int.parse(newId), 
+        "name": _name.text.trim(),
+        "category": _selectedCategory ?? 'Uncategorized',
+        "price": double.tryParse(_price.text) ?? 0.0,
+        "cost": double.tryParse(_cost.text) ?? 0.0,
+        "taxRate": double.tryParse(_taxRate.text) ?? 0.0,
+        "sku": _sku.text.trim(),
+        "barcode": _barcode.text.trim(),
+        "stock": int.tryParse(_stock.text) ?? 0,
+        "imageUrl": _imageUrl.text.trim(),
+        "description": _description.text.trim(),
+        "user_id": currentUser.email, // 🌟 THE FIX: Stamped the email so it shows up!
+        "createdAt": FieldValue.serverTimestamp(),
+      };
+
+      // 2. Send directly to Firebase!
+      await FirebaseFirestore.instance.collection('products').doc(newId).set(productData);
+
+      // 3. Add locally to update the "Recently Added" UI instantly
+      widget.appState.addProduct(Product(
+        id: newId, 
+        name: productData["name"] as String,
+        category: productData["category"] as String,
+        price: productData["price"] as double,
+        cost: productData["cost"] as double,
+        taxRate: productData["taxRate"] as double,
+        sku: productData["sku"] as String,
+        barcode: productData["barcode"] as String,
+        stock: productData["stock"] as int,
+        imageUrl: (productData["imageUrl"] as String).isEmpty 
+            ? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=80&h=80&fit=crop' 
+            : productData["imageUrl"] as String,
+        description: productData["description"] as String,
+      ));
+      
+      widget.onStateChanged();
+      
+      // Clear fields
+      _name.clear(); _price.clear(); _cost.clear(); _taxRate.clear(); 
+      _sku.clear(); _barcode.clear(); _stock.clear(); _imageUrl.clear(); _description.clear();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Product added successfully! ✅'),
+          backgroundColor: const Color(0xFF22C88A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to save to database! $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -87,36 +158,61 @@ class _AddProductScreenState extends State<AddProductScreen> {
             key: _formKey,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               if (isMobile) ...[
+                // 📱 MOBILE LAYOUT (Stacked)
                 _field('Product Name *', _name, hint: 'e.g. Espresso', isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
-                const SizedBox(height: 14),
-                _field('Description', _description, hint: 'Short product description', maxLines: 3, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
                 const SizedBox(height: 14),
                 _catField(isDark: isDark, bgInput: bgInput, inputText: inputText, hintColor: hintColor, labelColor: textMuted),
                 const SizedBox(height: 14),
-                _field('Price (₱) *', _price, hint: '0.00', type: TextInputType.number, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted,
+                _field('Description', _description, hint: 'Short product description', maxLines: 3, required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
+                const SizedBox(height: 14),
+                _field('Price (${widget.appState.currencySymbol}) *', _price, hint: '0.00', type: TextInputType.number, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted,
                     validator: (v) => double.tryParse(v ?? '') == null ? 'Enter valid price' : null),
+                const SizedBox(height: 14),
+                _field('Cost (${widget.appState.currencySymbol})', _cost, hint: '0.00', type: TextInputType.number, required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
+                const SizedBox(height: 14),
+                _field('Tax (%)', _taxRate, hint: '0.0', type: TextInputType.number, required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
                 const SizedBox(height: 14),
                 _field('Stock Quantity *', _stock, hint: '0', type: TextInputType.number, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted,
                     validator: (v) => int.tryParse(v ?? '') == null ? 'Enter valid number' : null),
                 const SizedBox(height: 14),
+                _field('SKU (optional)', _sku, hint: 'e.g. BEV-001', required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
+                const SizedBox(height: 14),
+                _field('Barcode (optional)', _barcode, hint: 'Scan or type', required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
+                const SizedBox(height: 14),
                 _field('Image URL (optional)', _imageUrl, hint: 'https://...', required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
               ] else ...[
+                // 💻 DESKTOP LAYOUT (Side-by-side)
                 Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(child: _field('Product Name *', _name, hint: 'e.g. Espresso', isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted)),
+                  Expanded(flex: 2, child: _field('Product Name *', _name, hint: 'e.g. Espresso', isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted)),
                   const SizedBox(width: 16),
-                  Expanded(child: _catField(isDark: isDark, bgInput: bgInput, inputText: inputText, hintColor: hintColor, labelColor: textMuted)),
+                  Expanded(flex: 1, child: _catField(isDark: isDark, bgInput: bgInput, inputText: inputText, hintColor: hintColor, labelColor: textMuted)),
                 ]),
                 const SizedBox(height: 16),
-                _field('Description', _description, hint: 'Short product description', maxLines: 3, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
+                _field('Description', _description, hint: 'Short product description', maxLines: 2, required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
                 const SizedBox(height: 16),
+                
+                // Pricing Row
                 Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(child: _field('Price (₱) *', _price, hint: '0.00', type: TextInputType.number, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted,
+                  Expanded(child: _field('Price (${widget.appState.currencySymbol}) *', _price, hint: '0.00', type: TextInputType.number, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted,
                       validator: (v) => double.tryParse(v ?? '') == null ? 'Enter valid price' : null)),
                   const SizedBox(width: 16),
-                  Expanded(child: _field('Stock Quantity *', _stock, hint: '0', type: TextInputType.number, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted,
-                      validator: (v) => int.tryParse(v ?? '') == null ? 'Enter valid number' : null)),
+                  Expanded(child: _field('Cost (${widget.appState.currencySymbol})', _cost, hint: '0.00', type: TextInputType.number, required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted)),
+                  const SizedBox(width: 16),
+                  Expanded(child: _field('Tax (%)', _taxRate, hint: '0.0', type: TextInputType.number, required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted)),
                 ]),
                 const SizedBox(height: 16),
+                
+                // Inventory Row
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(child: _field('Stock Quantity *', _stock, hint: '0', type: TextInputType.number, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted,
+                      validator: (v) => int.tryParse(v ?? '') == null ? 'Enter valid number' : null)),
+                  const SizedBox(width: 16),
+                  Expanded(child: _field('SKU (optional)', _sku, hint: 'e.g. BEV-001', required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted)),
+                  const SizedBox(width: 16),
+                  Expanded(child: _field('Barcode (optional)', _barcode, hint: 'Scan or type', required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted)),
+                ]),
+                const SizedBox(height: 16),
+                
                 _field('Image URL (optional)', _imageUrl, hint: 'https://images.unsplash.com/...', required: false, isDark: isDark, inputText: inputText, hintColor: hintColor, bgInput: bgInput, labelColor: textMuted),
               ],
               const SizedBox(height: 24),
@@ -136,13 +232,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     backgroundColor: const Color(0xFF4B6BFB), foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9))),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add Product', style: TextStyle(fontWeight: FontWeight.w600)),
-                  onPressed: () => _save(isDark),
+                  icon: _isLoading 
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                      : const Icon(Icons.add, size: 18),
+                  label: Text(_isLoading ? 'Saving...' : 'Add Product', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  onPressed: _isLoading ? null : () => _save(isDark),
                 ),
                 const SizedBox(width: 12),
                 TextButton(
-                  onPressed: () { _name.clear(); _price.clear(); _stock.clear(); _imageUrl.clear(); _description.clear(); setState(() {}); },
+                  onPressed: () { 
+                    _name.clear(); _price.clear(); _cost.clear(); _taxRate.clear(); 
+                    _sku.clear(); _barcode.clear(); _stock.clear(); _imageUrl.clear(); _description.clear(); 
+                    setState(() {}); 
+                  },
                   child: Text('Clear', style: TextStyle(color: textMuted)),
                 ),
               ]),
@@ -169,7 +271,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(p.name, style: TextStyle(color: textPrimary, fontWeight: FontWeight.w500)),
-              Text('${p.category} • ₱${p.price.toStringAsFixed(2)} • ${p.stock} units',
+              Text('${p.category} • ${widget.appState.currencySymbol}${p.price.toStringAsFixed(2)} • ${p.stock} units',
                 style: TextStyle(color: textMuted, fontSize: 11)),
             ])),
           ]),
@@ -214,7 +316,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       const SizedBox(height: 6),
       TextFormField(
         controller: ctrl, maxLines: maxLines, keyboardType: type,
-        onChanged: (_) => setState(() {}),
+        onChanged: (_) => setState(() {}), 
         style: TextStyle(color: inputText, fontSize: 14),
         decoration: InputDecoration(
           hintText: hint, hintStyle: TextStyle(color: hintColor, fontSize: 13),
@@ -231,3 +333,4 @@ class _AddProductScreenState extends State<AddProductScreen> {
     ]);
   }
 }
+

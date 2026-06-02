@@ -1,5 +1,239 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/app_state.dart';
+
+// ─── Inventory Report (NEW FIREBASE VERSION) ──────────────────────────────────
+class InventoryReportScreen extends StatefulWidget {
+  final AppState appState;
+  const InventoryReportScreen({super.key, required this.appState});
+
+  @override
+  State<InventoryReportScreen> createState() => _InventoryReportScreenState();
+}
+
+class _InventoryReportScreenState extends State<InventoryReportScreen> {
+  bool _isLoading = true;
+  List<Product> _liveProducts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchInventoryData();
+  }
+
+  Future<void> _fetchInventoryData() async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('products')
+          .where('user_id', isEqualTo: currentUser.email)
+          .get();
+
+      final List<Product> products = [];
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        products.add(Product(
+          id: doc.id,
+          name: data['name'] ?? 'Unnamed',
+          category: data['category'] ?? 'Uncategorized',
+          price: double.tryParse(data['price']?.toString() ?? '0') ?? 0.0,
+          cost: double.tryParse(data['cost']?.toString() ?? '0') ?? 0.0,
+          taxRate: double.tryParse(data['taxRate']?.toString() ?? '0') ?? 0.0,
+          sku: data['sku'] ?? '',
+          barcode: data['barcode'] ?? '',
+          stock: int.tryParse(data['stock']?.toString() ?? '0') ?? 0,
+          imageUrl: data['imageUrl'] ?? data['image_url'] ?? '',
+          description: data['description'] ?? '',
+        ));
+      }
+
+      if (mounted) {
+        setState(() {
+          _liveProducts = products;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Inventory Fetch Error: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1D2E);
+    final textMuted = isDark ? Colors.white54 : const Color(0xFF6B7280);
+    final bgCard = isDark ? const Color(0xFF1A1D2E) : Colors.white;
+    final headerMuted = isDark ? Colors.white54 : const Color(0xFF6B7280);
+
+    final sym = widget.appState.currencySymbol;
+
+    int totalUnits = 0;
+    double inventoryValue = 0.0;
+    int lowStockCount = 0;
+
+    for (var p in _liveProducts) {
+      totalUnits += p.stock;
+      // Value is calculated as stock * cost (or price if cost is 0)
+      double itemValue = p.cost > 0 ? p.cost : p.price;
+      inventoryValue += (p.stock * itemValue);
+      if (p.isLowStock) lowStockCount++;
+    }
+
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF4B6BFB)));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(50),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Inventory Report', style: TextStyle(color: textPrimary, fontSize: 24, fontWeight: FontWeight.bold)),
+            Text('Overview of your inventory status', style: TextStyle(color: textMuted, fontSize: 12)),
+            const SizedBox(height: 24),
+
+            // ── Top Summary Cards ──
+            LayoutBuilder(builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 600;
+              final cards = [
+                _SummaryCard(title: 'Total Units', value: '$totalUnits', icon: Icons.inventory_2_outlined, color: const Color(0xFF4B6BFB), isDark: isDark),
+                _SummaryCard(title: 'Low Stock Items Count', value: '$lowStockCount', icon: Icons.warning_amber_rounded, color: Colors.redAccent, isDark: isDark),
+                _SummaryCard(title: 'Inventory Value', value: '$sym${inventoryValue.toStringAsFixed(2)}', icon: Icons.attach_money, color: const Color(0xFF22C88A), isDark: isDark),
+              ];
+              if (isNarrow) {
+                return Column(children: [cards[0], const SizedBox(height: 12), cards[1], const SizedBox(height: 12), cards[2]]);
+              }
+              return Row(children: [Expanded(child: cards[0]), const SizedBox(width: 16), Expanded(child: cards[1]), const SizedBox(width: 16), Expanded(child: cards[2])]);
+            }),
+            const SizedBox(height: 32),
+
+            // ── Product Breakdown Table ──
+            Text('Product Breakdown', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: bgCard,
+                borderRadius: BorderRadius.circular(12),
+                border: isDark ? null : Border.all(color: const Color(0xFFE5E7EB)),
+                boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    child: Row(
+                      children: [
+                        Expanded(flex: 3, child: Text('Product', style: TextStyle(color: headerMuted, fontWeight: FontWeight.w600, fontSize: 12))),
+                        Expanded(flex: 2, child: Text('Category', style: TextStyle(color: headerMuted, fontWeight: FontWeight.w600, fontSize: 12))),
+                        Expanded(flex: 1, child: Text('Stock', style: TextStyle(color: headerMuted, fontWeight: FontWeight.w600, fontSize: 12))),
+                        Expanded(flex: 2, child: Text('Value', style: TextStyle(color: headerMuted, fontWeight: FontWeight.w600, fontSize: 12))),
+                        Expanded(flex: 1, child: Text('Status', style: TextStyle(color: headerMuted, fontWeight: FontWeight.w600, fontSize: 12))),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: isDark ? Colors.white12 : const Color(0xFFE5E7EB)),
+                  if (_liveProducts.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(child: Text('No products found.', style: TextStyle(color: textMuted))),
+                    )
+                  else
+                    ..._liveProducts.map((p) {
+                      double itemValue = p.cost > 0 ? p.cost : p.price;
+                      double totalItemValue = p.stock * itemValue;
+                      
+                      return Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            child: Row(
+                              children: [
+                                Expanded(flex: 3, child: Text(p.name, style: TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w500))),
+                                Expanded(flex: 2, child: Text(p.category, style: TextStyle(color: textMuted, fontSize: 13))),
+                                Expanded(flex: 1, child: Text('${p.stock}', style: TextStyle(color: textPrimary, fontSize: 13))),
+                                Expanded(flex: 2, child: Text('$sym${totalItemValue.toStringAsFixed(2)}', style: TextStyle(color: textPrimary, fontSize: 13))),
+                                Expanded(
+                                  flex: 1, 
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: p.isLowStock ? const Color(0xFFF5C518).withOpacity(0.15) : const Color(0xFF22C88A).withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(6)
+                                      ),
+                                      child: Text(
+                                        p.isLowStock ? 'Low' : 'OK',
+                                        style: TextStyle(color: p.isLowStock ? const Color(0xFFF5C518) : const Color(0xFF22C88A), fontSize: 10, fontWeight: FontWeight.bold)
+                                      ),
+                                    ),
+                                  )
+                                ),
+                              ],
+                            ),
+                          ),
+                          Divider(height: 1, color: isDark ? Colors.white12 : const Color(0xFFE5E7EB)),
+                        ],
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  final String title, value;
+  final IconData icon;
+  final Color color;
+  final bool isDark;
+
+  const _SummaryCard({required this.title, required this.value, required this.icon, required this.color, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1D2E) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: isDark ? null : Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: color),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF6B7280), fontSize: 13)),
+                const SizedBox(height: 4),
+                Text(value, style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1A1D2E), fontSize: 24, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+}
+
 
 // ─── Stock Alerts ─────────────────────────────────────────────────────────────
 class StockAlertsScreen extends StatelessWidget {
@@ -96,6 +330,10 @@ class StockAlertsScreen extends StatelessWidget {
     overflow: TextOverflow.ellipsis);
 
   Widget _alertCard(Product p, Color color, Color bgCard, Color textPrimary, Color textMuted, BoxBorder? border, bool isDark) {
+    final displayImage = p.imageUrl.isNotEmpty 
+          ? p.imageUrl 
+          : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=80&h=80&fit=crop';
+          
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -110,10 +348,10 @@ class StockAlertsScreen extends StatelessWidget {
         const SizedBox(width: 12),
         ClipRRect(
           borderRadius: BorderRadius.circular(7),
-          child: Image.network(p.imageUrl, width: 38, height: 38, fit: BoxFit.cover,
+          child: Image.network(displayImage, width: 38, height: 38, fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(width: 38, height: 38,
               color: isDark ? Colors.white12 : const Color(0xFFF3F4F6),
-              child: Icon(Icons.image, color: isDark ? Colors.white38 : Colors.black26, size: 16))),
+              child: Icon(Icons.fastfood_outlined, color: isDark ? Colors.white38 : Colors.black26, size: 16))),
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -251,24 +489,75 @@ class _AdjustmentsScreenState extends State<AdjustmentsScreen> {
   @override
   void dispose() { _qtyCtrl.dispose(); _noteCtrl.dispose(); super.dispose(); }
 
-  void _apply() {
+  void _apply() async {
     if (_selected == null || _qtyCtrl.text.isEmpty) return;
     final qty = int.tryParse(_qtyCtrl.text) ?? 0;
     if (qty <= 0) return;
+    
     final newStock = _action == 'Add' ? _selected!.stock + qty : (_selected!.stock - qty).clamp(0, 9999);
-    widget.appState.updateProduct(_selected!.id, Product(
-      id: _selected!.id, name: _selected!.name, category: _selected!.category,
-      price: _selected!.price, stock: newStock, imageUrl: _selected!.imageUrl, description: _selected!.description,
-    ));
-    widget.onStateChanged();
-    _qtyCtrl.clear(); _noteCtrl.clear();
-    setState(() => _selected = null);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Stock adjusted! New qty: $newStock'),
-      backgroundColor: const Color(0xFF22C88A),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    ));
+    
+    try {
+      // 🌟 1. THE FIREBASE UPDATE: Actually push the new stock number to the cloud!
+      await FirebaseFirestore.instance.collection('products').doc(_selected!.id).update({
+        'stock': newStock,
+      });
+
+      // 🌟 2. PERMANENT HISTORY LOG: Save this action to a Firebase history collection
+      await FirebaseFirestore.instance.collection('stock_history').add({
+        'product_id': _selected!.id,
+        'productName': _selected!.name,
+        'action': _action == 'Add' ? 'Added' : 'Removed',
+        'quantity': qty,
+        'note': _noteCtrl.text,
+        'timestamp': FieldValue.serverTimestamp(),
+        'user_id': FirebaseAuth.instance.currentUser?.email ?? 'admin',
+      });
+
+      // 🌟 3. SAFE LOCAL UPDATE: Update the UI without accidentally erasing the cost, tax, and SKU!
+      widget.appState.updateProduct(_selected!.id, Product(
+        id: _selected!.id, 
+        name: _selected!.name, 
+        category: _selected!.category,
+        price: _selected!.price, 
+        cost: _selected!.cost,         // Saved!
+        taxRate: _selected!.taxRate,   // Saved!
+        sku: _selected!.sku,           // Saved!
+        barcode: _selected!.barcode,   // Saved!
+        stock: newStock, 
+        imageUrl: _selected!.imageUrl, 
+        description: _selected!.description,
+      ));
+
+      // 🌟 4. INSTANT HISTORY UI: Push it to the local history list so the tab updates immediately
+      widget.appState.stockHistory.insert(0, {
+        'productName': _selected!.name,
+        'action': _action == 'Add' ? 'Added' : 'Removed',
+        'quantity': qty,
+        'timestamp': DateTime.now(),
+      });
+
+      widget.onStateChanged();
+      
+      _qtyCtrl.clear(); 
+      _noteCtrl.clear();
+      setState(() => _selected = null);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Stock adjusted! New qty: $newStock'),
+          backgroundColor: const Color(0xFF22C88A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to update Firebase: $e'),
+          backgroundColor: Colors.redAccent,
+        ));
+      }
+    }
   }
 
   @override
@@ -334,7 +623,9 @@ class _AdjustmentsScreenState extends State<AdjustmentsScreen> {
                 ),
                 child: Row(children: [
                   ClipRRect(borderRadius: BorderRadius.circular(7),
-                    child: Image.network(_selected!.imageUrl, width: 40, height: 40, fit: BoxFit.cover,
+                    child: Image.network(
+                      _selected!.imageUrl.isNotEmpty ? _selected!.imageUrl : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=80&h=80&fit=crop', 
+                      width: 40, height: 40, fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(width: 40, height: 40,
                         color: isDark ? Colors.white12 : const Color(0xFFE5E7EB)))),
                   const SizedBox(width: 12),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/app_state.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import '../models/settings_scroll_target.dart';
 
 class Sidebar extends StatefulWidget {
@@ -59,7 +61,7 @@ class _SidebarState extends State<Sidebar> {
       if (['stock_alerts', 'stock_history', 'adjustments'].contains(route)) {
         _inventoryExpanded = true;
       }
-      if (['sales_report', 'inventory_report', 'customer_report', 'financial_report'].contains(route)) {
+      if (['sales_report', 'inventory_report', 'financial_report'].contains(route)) {
         _reportsExpanded = true;
       }
       if (['settings_theme', 'settings', 'settings_store', 'settings_account', 'logout'].contains(route)) {
@@ -76,15 +78,19 @@ class _SidebarState extends State<Sidebar> {
     // SettingsScrollTarget records which section to scroll to.
     if (route == 'settings_theme') {
       widget.appState.currentRoute = 'settings';
+      html.window.localStorage['last_route'] = 'settings';
       SettingsScrollTarget.section = 'appearance';
     } else if (route == 'settings_store') {
       widget.appState.currentRoute = 'settings';
+      html.window.localStorage['last_route'] = 'settings';
       SettingsScrollTarget.section = 'store';
     } else if (route == 'settings_account') {
       widget.appState.currentRoute = 'settings';
+      html.window.localStorage['last_route'] = 'settings';
       SettingsScrollTarget.section = 'account';
     } else {
       widget.appState.currentRoute = route;
+      html.window.localStorage['last_route'] = route;
       SettingsScrollTarget.section = null;
     }
 
@@ -333,7 +339,6 @@ class _SidebarState extends State<Sidebar> {
                           ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                               _subItem('Sales Report', 'sales_report', isDark, textMuted),
                               _subItem('Inventory Report', 'inventory_report', isDark, textMuted),
-                              _subItem('Customer Report', 'customer_report', isDark, textMuted),
                               _subItem('Financial Report', 'financial_report', isDark, textMuted),
                             ])
                           : const SizedBox.shrink(),

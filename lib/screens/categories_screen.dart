@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/app_state.dart';
 import '../widgets/page_header.dart';
+import '../services/api_service.dart';
 
 // ─── Product Categories (under Products menu) ─────────────────────────────────
-// Purpose: Overview of categories showing product counts and stats
 class ProductCategoriesScreen extends StatelessWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
@@ -19,7 +19,19 @@ class ProductCategoriesScreen extends StatelessWidget {
         ? <BoxShadow>[]
         : [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))];
 
-    final cats = appState.categories;
+    // 🌟 THE FIX: Dynamically generate the category list straight from the smart AppState scanner!
+    final dynamicCategoryNames = appState.categoryNames;
+    
+    // We create temporary "virtual" category objects so the UI below doesn't break.
+    final cats = dynamicCategoryNames.map((name) {
+      // If it exists in the manual list, use its icon/desc. Otherwise, use defaults.
+      try {
+        return appState.categories.firstWhere((c) => c.name == name);
+      } catch (e) {
+        return Category(id: 'temp_$name', name: name, description: 'Auto-generated from products', icon: '📁');
+      }
+    }).toList();
+
     final totalProducts = appState.products.length;
 
     return SingleChildScrollView(
@@ -45,7 +57,7 @@ class ProductCategoriesScreen extends StatelessWidget {
               icon: Icons.category_outlined,
               color: const Color(0xFF4B6BFB),
               label: 'Total Categories',
-              value: '${cats.length}',
+              value: '${cats.length}', // 🌟 Now accurate!
               isDark: isDark,
               textPrimary: textPrimary,
               textMuted: textMuted,
@@ -111,19 +123,18 @@ class ProductCategoriesScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(children: [
-                      Text(cat.icon, style: const TextStyle(fontSize: 26)),
+                      Text(cat.icon.isEmpty ? '📁' : cat.icon, style: const TextStyle(fontSize: 26)),
                       const SizedBox(width: 10),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(cat.name,
                             style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                             overflow: TextOverflow.ellipsis),
-                        Text(cat.description,
+                        Text(cat.description.isEmpty ? 'No description' : cat.description,
                             style: TextStyle(color: textMuted, fontSize: 11),
                             overflow: TextOverflow.ellipsis, maxLines: 1),
                       ])),
                     ]),
                     const SizedBox(height: 8),
-                    // Progress bar
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
@@ -179,7 +190,7 @@ class ProductCategoriesScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(children: [
-                  Text(cat.icon, style: const TextStyle(fontSize: 18)),
+                  Text(cat.icon.isEmpty ? '📁' : cat.icon, style: const TextStyle(fontSize: 18)),
                   const SizedBox(width: 8),
                   Text(cat.name,
                       style: TextStyle(color: textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
@@ -201,7 +212,8 @@ class ProductCategoriesScreen extends StatelessWidget {
                 child: Row(children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
-                    child: Image.network(p.imageUrl, width: 36, height: 36, fit: BoxFit.cover,
+                    // 🌟 Fixed Image Network Error handling
+                    child: Image.network(p.imageUrl ?? '', width: 36, height: 36, fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(
                             width: 36, height: 36,
                             color: isDark ? Colors.white12 : const Color(0xFFF3F4F6),
@@ -212,7 +224,7 @@ class ProductCategoriesScreen extends StatelessWidget {
                       style: TextStyle(color: textPrimary, fontSize: 13),
                       overflow: TextOverflow.ellipsis)),
                   const SizedBox(width: 8),
-                  Text('₱${p.price.toStringAsFixed(2)}',
+                  Text('${appState.currencySymbol}${p.price.toStringAsFixed(2)}',
                       style: TextStyle(color: textMuted, fontSize: 12)),
                   const SizedBox(width: 12),
                   Container(
@@ -258,8 +270,7 @@ class ProductCategoriesScreen extends StatelessWidget {
   );
 }
 
-// ─── All Categories (under Categories menu) ───────────────────────────────────
-// Purpose: Full CRUD — add new categories inline, edit & delete existing
+// ─── All Categories (with Emoji Picker) ───────────────────────────────────
 class AllCategoriesScreen extends StatefulWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
@@ -273,8 +284,33 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  String _icon = '';
-  final _icons = ['📦', '☕', '🥐', '🥗', '🍕', '🍔', '🥤', '🍰', '🍜', '🧁', '🥩', '🍱', '🌿'];
+  String _icon = '📁'; 
+  final _icons = ['📦', '☕', '🥐', '🥗', '🍕', '🍔', '🥤', '🍰', '🍜', '🧁', '🥩', '🍱', '🌿', '📁', '🏷️'];
+  bool _isLoading = false; 
+  bool _isFetching = true; 
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLiveCategories();
+  }
+
+  Future<void> _fetchLiveCategories() async {
+    try {
+      final liveData = await WebApiService.getCategories(); 
+      if (mounted) {
+        setState(() {
+          widget.appState.categories.clear();
+          widget.appState.categories.addAll(liveData);
+          _isFetching = false;
+        });
+        widget.onStateChanged(); 
+      }
+    } catch (e) {
+      print("Web Fetch Error: $e");
+      if (mounted) setState(() => _isFetching = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -283,30 +319,51 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
     super.dispose();
   }
 
-  void _save() {
+  void _save() async {
     if (!_formKey.currentState!.validate()) return;
-    widget.appState.addCategory(Category(
-      id: 'C${DateTime.now().millisecondsSinceEpoch}',
-      name: _nameCtrl.text.trim(),
-      description: _descCtrl.text.trim(),
-      icon: _icon,
-    ));
-    widget.onStateChanged();
-    _nameCtrl.clear();
-    _descCtrl.clear();
-    setState(() => _icon = '');
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: const Text('Category added! ✅'),
-      backgroundColor: const Color(0xFF22C88A),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    ));
+    
+    setState(() => _isLoading = true);
+
+    final categoryData = {
+      "name": _nameCtrl.text.trim(),
+      "description": _descCtrl.text.trim(),
+      "icon": _icon, 
+    };
+
+    bool success = await WebApiService.addCategory(categoryData);
+
+    if (success) {
+      _fetchLiveCategories();
+      _nameCtrl.clear();
+      _descCtrl.clear();
+      setState(() => _icon = '📁');
+      
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Category added! ✅'),
+          backgroundColor: const Color(0xFF22C88A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ));
+      }
+    } else {
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Failed to save category.'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ));
+      }
+    }
+    if (mounted) setState(() => _isLoading = false);
   }
 
   void _showEditDialog(Category cat) {
     final nameCtrl = TextEditingController(text: cat.name);
     final descCtrl = TextEditingController(text: cat.description);
-    String icon = cat.icon;
+    String icon = cat.icon.isEmpty ? '📁' : cat.icon;
+    
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgDialog = isDark ? const Color(0xFF1A1D2E) : Colors.white;
     final textPrimary = isDark ? Colors.white : const Color(0xFF1A1D2E);
@@ -322,43 +379,54 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
           backgroundColor: bgDialog,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           title: Text('Edit Category', style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold)),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            _tfWidget('Name', nameCtrl, isDark: isDark, bgInput: bgInput, inputText: inputText, hintColor: hintColor, labelColor: textMuted),
-            const SizedBox(height: 12),
-            _tfWidget('Description', descCtrl, isDark: isDark, bgInput: bgInput, inputText: inputText, hintColor: hintColor, labelColor: textMuted),
-            const SizedBox(height: 12),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Icon', style: TextStyle(color: textMuted, fontSize: 12)),
-              const SizedBox(height: 8),
-              Wrap(spacing: 6, runSpacing: 6,
-                children: _icons.map((e) => GestureDetector(
-                  onTap: () => setS(() => icon = e),
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: icon == e ? const Color(0xFF4B6BFB).withOpacity(0.25) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(6),
-                      border: icon == e
-                          ? Border.all(color: const Color(0xFF4B6BFB))
-                          : Border.all(color: Colors.transparent),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              _tfWidget('Name', nameCtrl, isDark: isDark, bgInput: bgInput, inputText: inputText, hintColor: hintColor, labelColor: textMuted),
+              const SizedBox(height: 12),
+              _tfWidget('Description', descCtrl, isDark: isDark, bgInput: bgInput, inputText: inputText, hintColor: hintColor, labelColor: textMuted),
+              const SizedBox(height: 12),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Icon', style: TextStyle(color: textMuted, fontSize: 12)),
+                const SizedBox(height: 8),
+                Wrap(spacing: 6, runSpacing: 6,
+                  children: _icons.map((e) => GestureDetector(
+                    onTap: () => setS(() => icon = e),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: icon == e ? const Color(0xFF4B6BFB).withOpacity(0.25) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                        border: icon == e
+                            ? Border.all(color: const Color(0xFF4B6BFB))
+                            : Border.all(color: Colors.transparent),
+                      ),
+                      child: Text(e, style: const TextStyle(fontSize: 18)),
                     ),
-                    child: Text(e, style: const TextStyle(fontSize: 18)),
-                  ),
-                )).toList(),
-              ),
+                  )).toList(),
+                ),
+              ]),
             ]),
-          ]),
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx),
                 child: Text('Cancel', style: TextStyle(color: textMuted))),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4B6BFB), foregroundColor: Colors.white),
-              onPressed: () {
-                widget.appState.updateCategory(cat.id,
-                    Category(id: cat.id, name: nameCtrl.text.trim(), description: descCtrl.text.trim(), icon: icon));
-                Navigator.pop(ctx);
-                setState(() {});
-                widget.onStateChanged();
+              onPressed: () async {
+                 Navigator.pop(ctx);
+                 setState(() => _isLoading = true);
+
+                 bool success = await WebApiService.updateCategory(cat.id, {
+                   "name": nameCtrl.text.trim(),
+                   "description": descCtrl.text.trim(),
+                   "icon": icon,
+                 });
+
+                 if (success) {
+                   _fetchLiveCategories();
+                 } else {
+                   if (mounted) setState(() => _isLoading = false);
+                 }
               },
               child: const Text('Save'),
             ),
@@ -384,11 +452,19 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
               child: Text('Cancel', style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF6B7280)))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              widget.appState.deleteCategory(cat.id);
-              setState(() {});
-              widget.onStateChanged();
+              setState(() => _isLoading = true);
+
+              bool success = await WebApiService.deleteCategory(cat.id);
+
+              if (success) {
+                 widget.appState.deleteCategory(cat.id);
+                 setState(() => _isLoading = false);
+                 widget.onStateChanged();
+              } else {
+                 if (mounted) setState(() => _isLoading = false);
+              }
             },
             child: const Text('Delete'),
           ),
@@ -412,10 +488,25 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
 
     final cats = widget.appState.categories;
 
+    if (_isFetching) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF4B6BFB)));
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const PageHeader(title: 'All Categories', subtitle: 'Add, edit, and delete your categories'),
+        PageHeader(
+          title: 'All Categories', 
+          subtitle: 'Add, edit, and delete your categories',
+          trailing: IconButton(
+            icon: const Icon(Icons.sync, color: Color(0xFF4B6BFB)),
+            tooltip: 'Sync Categories',
+            onPressed: () {
+              setState(() => _isFetching = true);
+              _fetchLiveCategories();
+            },
+          ),
+        ),
         const SizedBox(height: 20),
 
         // ── Add New Category form ─────────────────────────────────────
@@ -483,9 +574,11 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
                 ),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add Category', style: TextStyle(fontWeight: FontWeight.w600)),
-                onPressed: _save,
+                icon: _isLoading 
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.add, size: 18),
+                label: Text(_isLoading ? 'Saving...' : 'Add Category', style: const TextStyle(fontWeight: FontWeight.w600)),
+                onPressed: _isLoading ? null : _save,
               ),
             ]),
           ),
@@ -544,7 +637,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                               color: const Color(0xFF4B6BFB).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Center(child: Text(cat.icon, style: const TextStyle(fontSize: 22))),
+                            child: Center(child: Text(cat.icon.isEmpty ? '📁' : cat.icon, style: const TextStyle(fontSize: 22))),
                           ),
                           const SizedBox(width: 12),
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -614,8 +707,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   }
 }
 
-// ─── Manage Categories (under Categories menu) ────────────────────────────────
-// Purpose: Reorder via drag-and-drop, bulk delete, search/filter
+// ─── Manage Categories (Reorder & Bulk Delete) ────────────────────────────────
 class ManageCategoriesScreen extends StatefulWidget {
   final AppState appState;
   final VoidCallback onStateChanged;
@@ -629,6 +721,7 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
   final Set<String> _selected = {};
   String _search = '';
   bool _selectionMode = false;
+  bool _isLoading = false;
 
   List<Category> get _filtered => widget.appState.categories
       .where((c) => c.name.toLowerCase().contains(_search.toLowerCase()))
@@ -673,18 +766,30 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
               child: Text('Cancel', style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF6B7280)))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
+              setState(() => _isLoading = true);
+
+              bool allSuccess = true;
               for (final id in _selected) {
-                widget.appState.deleteCategory(id);
+                bool success = await WebApiService.deleteCategory(id);
+                if(success) {
+                   widget.appState.deleteCategory(id);
+                } else {
+                   allSuccess = false;
+                }
               }
-              setState(() { _selected.clear(); _selectionMode = false; });
+
+              setState(() { _selected.clear(); _selectionMode = false; _isLoading = false; });
               widget.onStateChanged();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Categories deleted'),
-                backgroundColor: Colors.redAccent,
-                behavior: SnackBarBehavior.floating,
-              ));
+
+              if(mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(allSuccess ? 'Categories deleted' : 'Some categories failed to delete'),
+                    backgroundColor: allSuccess ? Colors.redAccent : Colors.orange,
+                    behavior: SnackBarBehavior.floating,
+                  ));
+              }
             },
             child: const Text('Delete All'),
           ),
@@ -705,6 +810,10 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         : [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))];
 
     final cats = _filtered;
+
+    if(_isLoading) {
+       return const Center(child: CircularProgressIndicator(color: Color(0xFF4B6BFB)));
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -733,7 +842,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         ),
         const SizedBox(height: 20),
 
-        // ── Info banner ────────────────────────────────────────────────
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
@@ -752,7 +860,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         ),
         const SizedBox(height: 16),
 
-        // ── Search + select all ────────────────────────────────────────
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -791,7 +898,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
         ),
         const SizedBox(height: 14),
 
-        // ── Drag-and-drop reorder list ─────────────────────────────────
         cats.isEmpty
             ? Container(
                 padding: const EdgeInsets.all(40),
@@ -843,7 +949,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                                 : Colors.transparent,
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             child: Row(children: [
-                              // Checkbox
                               AnimatedContainer(
                                 duration: const Duration(milliseconds: 150),
                                 width: isSelected || _selectionMode ? 28 : 0,
@@ -853,17 +958,15 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                                         color: const Color(0xFF4B6BFB), size: 20)
                                     : null,
                               ),
-                              // Icon
                               Container(
                                 width: 40, height: 40,
                                 decoration: BoxDecoration(
                                   color: const Color(0xFF4B6BFB).withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Center(child: Text(cat.icon, style: const TextStyle(fontSize: 20))),
+                                child: Center(child: Text(cat.icon.isEmpty ? '📁' : cat.icon, style: const TextStyle(fontSize: 20))),
                               ),
                               const SizedBox(width: 12),
-                              // Name + description
                               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                 Text(cat.name,
                                     style: TextStyle(color: textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
@@ -871,7 +974,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                                     style: TextStyle(color: textMuted, fontSize: 12),
                                     overflow: TextOverflow.ellipsis),
                               ])),
-                              // Product count badge
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
@@ -882,7 +984,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                                     style: const TextStyle(color: Color(0xFF22C88A), fontSize: 11, fontWeight: FontWeight.w600)),
                               ),
                               const SizedBox(width: 8),
-                              // Drag handle
                               ReorderableDragStartListener(
                                 index: i,
                                 child: Icon(
@@ -902,7 +1003,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
               ),
 
         const SizedBox(height: 12),
-        // ── Footer hint ────────────────────────────────────────────────
         if (cats.isNotEmpty)
           Center(
             child: Text(

@@ -1,16 +1,24 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 // ─── Theme Preference Enum ─────────────────────────────────────────────────────
 enum ThemePreference { light, dark, system }
 
 // ─── Product Model ─────────────────────────────────────────────────────────────
-// ─── Product Model (Fixed for UI) ──────────────────────────────────────────
 class Product {
   final String id;
   String name;
   String category;
   double price;
+  
+  double cost;
+  double taxRate;
+  String sku;
+  String barcode;
+  
   int stock;
-  String imageUrl;    // 🌟 Removed the '?'
-  String description; // 🌟 Removed the '?'
+  String imageUrl;    
+  String description; 
   static const int lowStockThreshold = 20;
 
   Product({
@@ -18,9 +26,15 @@ class Product {
     required this.name,
     required this.category,
     required this.price,
+    
+    this.cost = 0.0,
+    this.taxRate = 0.0,
+    this.sku = '',
+    this.barcode = '',
+    
     required this.stock,
-    this.imageUrl = '',    // 🌟 Put default back
-    this.description = '', // 🌟 Put default back
+    this.imageUrl = '',    
+    this.description = '', 
   });
 
   bool get isLowStock => stock <= lowStockThreshold;
@@ -44,14 +58,10 @@ class Category {
 // ─── App State ─────────────────────────────────────────────────────────────────
 class AppState {
   String currentRoute = 'dashboard';
-
-  // Theme: light / dark / system (replaces the old isDarkTheme bool)
   ThemePreference themePreference = ThemePreference.light;
 
-  // Convenience getter kept for any widgets that still reference isDarkTheme
   bool get isDarkTheme => themePreference == ThemePreference.dark;
 
-  // Convenience setter — maps old bool usage to new enum
   set isDarkTheme(bool value) {
     themePreference = value ? ThemePreference.dark : ThemePreference.light;
   }
@@ -62,148 +72,43 @@ class AppState {
   String storeName = 'STORE';
   String adminName = 'Admin';
   String country = 'Philippines';
-  String currency = 'PHP (₱)';
+  String currency = 'PHP (₱) — Philippine Peso';
   String language = 'English';
   int lowStockThresholdSetting = 20;
 
-  // ── Sample products ───────────────────────────────────────────────────────
-  List<Product> products = [
-    Product(
-      id: 'P001',
-      name: 'Coffee',
-      category: 'Beverages',
-      price: 50.00,
-      stock: 100,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P002',
-      name: 'Tea',
-      category: 'Beverages',
-      price: 40.00,
-      stock: 80,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P003',
-      name: 'Orange Juice',
-      category: 'Beverages',
-      price: 60.00,
-      stock: 50,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P004',
-      name: 'Burger',
-      category: 'Main Dish',
-      price: 150.00,
-      stock: 20,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P005',
-      name: 'Pizza',
-      category: 'Main Dish',
-      price: 200.00,
-      stock: 15,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P006',
-      name: 'Pasta',
-      category: 'Main Dish',
-      price: 120.00,
-      stock: 25,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P007',
-      name: 'Soda',
-      category: 'Drinks',
-      price: 30.00,
-      stock: 200,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P008',
-      name: 'Mineral Water',
-      category: 'Drinks',
-      price: 20.00,
-      stock: 150,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P009',
-      name: 'Milk',
-      category: 'Drinks',
-      price: 45.00,
-      stock: 30,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P010',
-      name: 'French Fries',
-      category: 'Appetizer',
-      price: 80.00,
-      stock: 40,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P011',
-      name: 'Caesar Salad',
-      category: 'Appetizer',
-      price: 90.00,
-      stock: 35,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P012',
-      name: 'Chicken Wings',
-      category: 'Appetizer',
-      price: 100.00,
-      stock: 30,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P013',
-      name: 'Chocolate Cake',
-      category: 'Dessert',
-      price: 70.00,
-      stock: 10,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P014',
-      name: 'Ice Cream',
-      category: 'Dessert',
-      price: 50.00,
-      stock: 60,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-    Product(
-      id: 'P015',
-      name: 'Apple Pie',
-      category: 'Dessert',
-      price: 65.00,
-      stock: 15,
-      imageUrl: 'https://via.placeholder.com/40',
-    ),
-  ];
+  String get currencySymbol {
+    final match = RegExp(r'\((.+?)\)').firstMatch(currency);
+    return match != null ? match.group(1)! : '₱';
+  }
 
-  // ── Sample categories ─────────────────────────────────────────────────────
-  List<Category> categories = [
-    Category(id: 'C001', name: 'Beverages', description: 'Drinks and beverages', icon: '☕'),
-    Category(id: 'C002', name: 'Main Dish', description: 'Main course meals', icon: '🍽️'),
-    Category(id: 'C003', name: 'Drinks', description: 'Beverages and drinks', icon: '🥤'),
-    Category(id: 'C004', name: 'Appetizer', description: 'Starters and appetizers', icon: '🥗'),
-    Category(id: 'C005', name: 'Dessert', description: 'Sweet dishes and desserts', icon: '🍰'),
-  ];
+  List<Product> products = [];
+  List<Category> categories = [];
 
-  // ── Derived getters ───────────────────────────────────────────────────────
   List<Product> get lowStockProducts =>
       products.where((p) => p.stock <= lowStockThresholdSetting).toList();
 
-  List<String> get categoryNames => categories.map((c) => c.name).toList();
+  // 🌟 THE FIX: Dynamically scan products and instantly build the Category Chips!
+  List<String> get categoryNames {
+    final Set<String> names = {};
+    
+    // 1. Grab categories directly from the products you are selling
+    for (var p in products) {
+      if (p.category.trim().isNotEmpty && p.category != 'Uncategorized') {
+        names.add(p.category.trim());
+      }
+    }
+    
+    // 2. Also grab any official categories you manually built in the Categories tab
+    for (var c in categories) {
+      if (c.name.trim().isNotEmpty) {
+        names.add(c.name.trim());
+      }
+    }
+    
+    final sortedList = names.toList();
+    sortedList.sort(); // Alphabetizes the chips perfectly
+    return sortedList;
+  }
 
   // ── Methods for product management ─────────────────────────────────────────
   void addProduct(Product product) {
@@ -241,13 +146,48 @@ class AppState {
     return products.where((p) => p.category == categoryName).length;
   }
 
-  // ── Stock history tracking ─────────────────────────────────────────────────
+  // ── FIREBASE STOCK HISTORY TRACKING ────────────────────────────────
   final List<Map<String, dynamic>> _stockHistory = [];
 
   List<Map<String, dynamic>> get stockHistory => _stockHistory;
 
+  AppState() {
+    fetchStockHistoryFromFirebase();
+  }
+
+  Future<void> fetchStockHistoryFromFirebase() async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('stock_history')
+          .where('user_id', isEqualTo: currentUser.email)
+          .get();
+
+      _stockHistory.clear();
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        _stockHistory.add({
+          'productName': data['productName'] ?? 'Unknown',
+          'action': data['action'] ?? 'Updated',
+          'quantity': data['quantity'] ?? 0,
+          'timestamp': data['timestamp'] != null 
+              ? (data['timestamp'] as Timestamp).toDate() 
+              : DateTime.now(),
+        });
+      }
+
+      _stockHistory.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+
+    } catch (e) {
+      print("🚨 Error fetching stock history: $e");
+    }
+  }
+
   void recordStockChange(String productId, int quantity, String action) {
-    _stockHistory.add({
+    _stockHistory.insert(0, {
       'productId': productId,
       'quantity': quantity,
       'action': action,
